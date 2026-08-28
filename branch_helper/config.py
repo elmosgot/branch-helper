@@ -102,10 +102,10 @@ def resolve_profile(config: dict, alias_name: str | None) -> tuple[str, dict]:
 
     profile = aliases[name]
     source = profile.get("source")
-    if source not in ("jira", "github"):
+    if source not in ("jira", "github", "linear"):
         print(
             f"Alias '{name}' has invalid source '{source}'. "
-            "Must be 'jira' or 'github'.",
+            "Must be 'jira', 'github', or 'linear'.",
             file=sys.stderr,
         )
         sys.exit(1)
