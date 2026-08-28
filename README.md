@@ -2,19 +2,22 @@
 
 CLI tool that lists your assigned issues from Jira or GitHub and prints suggested git branch names and commit messages.
 
-## Issue sources
+Each project context is a named **alias** in config — source type and credentials combined. Use `--alias` to switch between them.
+
+## Usage
 
 ```bash
-branch-helper           # Jira (default)
-branch-helper --jira    # Jira (explicit)
-branch-helper --github  # GitHub Issues
+branch-helper                          # uses default alias
+branch-helper --alias project-x         # Jira project
+branch-helper --alias elmosgot         # GitHub for elmosgot repos
+branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
 ### Jira output
 
 For each issue it shows:
 
-- **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `BADM-2433-add-pest-testing`)
+- **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `PROJ-123-add-pest-testing`)
 - **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues
 - **commit message** — formatted as `(KEY) summary`
 
@@ -67,21 +70,26 @@ Create a personal access token with:
 The CLI reads `~/.config/branch-helper/config.yml`. Copy `example.yml` as a starting point:
 
 ```yaml
-jira:
-    domain: "your-org.atlassian.net"
-    username: "you@example.com"
-    token: "your-jira-api-token"
+default: project-x
 
-github:
-    token: "ghp_your-github-personal-access-token"
+aliases:
+  project-x:
+    source: jira
+    jira:
+      domain: "your-org.atlassian.net"
+      username: "you@example.com"
+      token: "your-jira-api-token"
+
+  elmosgot:
+    source: github
+    github:
+      token: "ghp_your-github-personal-access-token"
 ```
 
-- `jira.domain` — your Atlassian host (e.g. `your-org.atlassian.net`)
-- `jira.username` — the email tied to your Jira API token
-- `jira.token` — your Jira personal API token
-- `github.token` — your GitHub personal access token
-
-Only the section for the chosen source is required at runtime (`jira` for default/`--jira`, `github` for `--github`).
+- `default` — alias used when `--alias` is omitted
+- `aliases.<name>.source` — `jira` or `github`
+- `aliases.<name>.jira` — Jira domain, username, token
+- `aliases.<name>.github` — GitHub token
 
 ## Setup
 
@@ -109,17 +117,6 @@ Only the section for the chosen source is required at runtime (`jira` for defaul
 sudo install -m 755 branch-helper /usr/local/bin/branch-helper
 ```
 
-## Usage
-
-Run from any directory:
-
-```bash
-branch-helper
-branch-helper --github
-```
-
-The command expects `~/.config/branch-helper/config.yml`. If the file is missing, it prints the expected path and exits.
-
 ## Updating
 
 After making changes to the script, reinstall:
@@ -127,3 +124,5 @@ After making changes to the script, reinstall:
 ```bash
 sudo install -m 755 branch-helper /usr/local/bin/branch-helper
 ```
+
+The command expects `~/.config/branch-helper/config.yml`. If the file is missing, it prints the expected path and exits.
