@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+import re
+import sys
+import unicodedata
+from pathlib import Path
+from typing import Optional
+
+import requests
+import yaml
+from requests.auth import HTTPBasicAuth
+
+#
+# Create personal token in jira:
+#    read:account
+#     read:project:jira
+#     read:me
+#     read:issue:jira
+#     read:field:jira
+#     read:filter:jira
+#     read:epic:jira-software
+#     read:project.feature:jira
+#
+# Debian 12 > Run:
+#     apt install python3-yaml python3-requests
+#
+# Debian < 12 Run:
+#     apt install python3-pip
+#     pip install pyyaml requests
+#
+
+CONFIG_PATH = Path.home() / ".config" / "branch-helper" / "config.yml"
+
+
+def slugify(text: str) -> str:
+	"""Convert Jira summary text into a git-safe branch name segment."""
+	normalized = unicodedata.normalize("NFKD", text)
+	ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+	slug = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_text)
+	slug = re.sub(r"[-.]{2,}", "-", slug)
+	return slug.strip("-.")
+
+
+def read_config() -> dict:
+	if not CONFIG_PATH.is_file():
+		print(f"Config not found: {CONFIG_PATH}", file=sys.stderr)
+		sys.exit(1)
+
+	with open(CONFIG_PATH) as stream:
+		try:
+			return yaml.safe_load(stream)
+		except yaml.YAMLError as error:
+			print(error, file=sys.stderr)
+			sys.exit(1)
+
+
+def retrieve(config: dict, endpoint: str, payload: dict) -> dict:
+	jira = config.get('jira')
+	api_url = f"https://{jira.get('domain')}/rest/api/3/{endpoint}"
+	headers = {
+		"Accept": "application/json",
+		"Content-Type": "application/json"
+	}
+	auth = HTTPBasicAuth(jira.get("username"), jira.get("token"))
+
+	response = requests.post(
+		api_url,
+		headers=headers,
+		auth=auth,
+		json=payload
+	)
+	response.raise_for_status()
+
+	return response.json()
+
+
+def get_tasks(config: dict) -> dict:
+	payload = {
+		"jql": (
+			"assignee = currentUser() "
+			"AND issuetype IN(\"Bug\", \"Task\", \"Sub-task\", \"Feature\", \"Story\") "
+			"AND status IN (\"In Progress\", \"Review\", \"Test\")"
+		),
+		"fields": ["key", "summary", "issuetype", "parent", "status"],
+		"maxResults": 100
+	}
+
+	return retrieve(config, "search/jql", payload)
+
+
+class Entity:
+	def __init__(self, data: dict):
+		self.data = data
+		self.fields = {} if data["fields"] == None else data["fields"]
+
+	def getId(self) -> str:
+		return self.data.get("key")
+
+	def getField(self, key, default = None) -> Optional[str]:
+		field = self.fields.get(key)
+
+		return default if field == None else field
+
+	def getName(self) -> str:
+		return f"{self.getId()} {self.getField('summary')}"
+
+	def getType(self) -> str:
+		issue_type = self.getField('issuetype')
+		return f"{issue_type['name']}"
+
+	def message(self) -> str:
+		return f"({self.getId()}) {self.getField('summary')}"
+
+
+class JiraEntity(Entity):
+	def __init__(self, data: dict):
+		super().__init__(data)
+		if (self.hasParent()):
+			self.parent = JiraEntity(self.getField("parent"))
+
+	def hasParent(self) -> bool:
+		return self.getField("parent") != None
+
+	def getParent(self) -> Entity:
+		return self.parent
+
+	def getBranch(self) -> str:
+		base = self
+		if (self.hasParent()):
+			base = self.parent
+
+		title = base.getField("summary")
+
+		return f"{base.getId()}-{slugify(title)}"
+
+	def getTaskBranch(self) -> str:
+		if (self.hasParent() == False):
+			return 'no-parent'
+
+		title = self.getField("summary")
+
+		return f"{self.parent.getId()}-{self.getId()}-{slugify(title)}"
+
+
+def main() -> int:
+	config = read_config()
+	tasks = get_tasks(config)
+	print("----------------")
+	for issue in tasks.get("issues"):
+		task = JiraEntity(issue)
+		type = task.getType()
+
+		print(f"{task.getType()}: {task.getName()}")
+		print(f"    branch: {task.getBranch()}")
+		if type in ['Subtaak', 'Taak']:
+			print(f"    task branch: {task.getTaskBranch()}")
+			print(f"    commit message: {task.message()}")
+		else:
+			print(f"Not a subtaak: {type}")
+		print("----------------")
+
+	return 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())

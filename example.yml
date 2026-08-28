@@ -1,0 +1,4 @@
+jira:
+    domain: "your-org.atlassian.net"
+    username: "you@example.com"
+    token: "your-jira-api-token"
