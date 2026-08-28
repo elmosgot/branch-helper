@@ -90,10 +90,24 @@ aliases:
       token: "ghp_your-github-personal-access-token"
 ```
 
-- `default` — alias used when `--alias` is omitted
+- `default` — alias used when `--alias` is omitted and no `.branch-helper-default` is found
 - `aliases.<name>.source` — `jira` or `github`
 - `aliases.<name>.jira` — Jira domain, username, token
 - `aliases.<name>.github` — GitHub token
+
+## Per-project default
+
+Place a `.branch-helper-default` file in a repo root to override the global default for that project. The file contains a single alias name:
+
+```
+elmosgot
+```
+
+branch-helper walks up from the current directory until it finds this file (same idea as git finding `.git`). Commit it in your repo so the whole team gets the correct default.
+
+**Priority:** `--alias` > `.branch-helper-default` > `config.yml` `default`
+
+When a local default is set, the interactive wizard skips project selection and goes straight to issue selection.
 
 ## Setup
 
