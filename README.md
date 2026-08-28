@@ -7,11 +7,15 @@ Each project context is a named **alias** in config — source type and credenti
 ## Usage
 
 ```bash
-branch-helper                          # uses default alias
-branch-helper --alias project-x         # Jira project
-branch-helper --alias elmosgot         # GitHub for elmosgot repos
+branch-helper                          # interactive wizard (TTY): pick project, pick issue
+branch-helper --alias project-x         # list all assigned issues for Jira project
+branch-helper --alias elmosgot         # list all assigned issues for GitHub
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
+
+On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. If you have only one project or one issue, that step is skipped automatically.
+
+Use `--alias` when you want a non-interactive list of all assigned issues for a specific project.
 
 ### Jira output
 

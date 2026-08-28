@@ -285,32 +285,116 @@ class GitHubIssue:
         return f"(#{self.getNumber()}) {self.getTitle()}"
 
 
+def print_jira_issue(task: JiraEntity) -> None:
+    issue_type = task.getType()
+    print("----------------")
+    print(f"{issue_type}: {task.getName()}")
+    print(f"    branch: {task.getBranch()}")
+    if issue_type in ["Subtaak", "Taak"]:
+        print(f"    task branch: {task.getTaskBranch()}")
+        print(f"    commit message: {task.message()}")
+    else:
+        print(f"Not a subtaak: {issue_type}")
+    print("----------------")
+
+
+def print_github_issue(task: GitHubIssue) -> None:
+    print("----------------")
+    print(f"Issue: {task.getName()}")
+    print(f"    branch: {task.getBranch()}")
+    print(f"    commit message: {task.message()}")
+    print("----------------")
+
+
 def print_jira_issues(profile: dict, alias: str) -> None:
     tasks = get_jira_tasks(profile, alias)
-    print("----------------")
     for issue in tasks.get("issues", []):
-        task = JiraEntity(issue)
-        issue_type = task.getType()
-
-        print(f"{task.getType()}: {task.getName()}")
-        print(f"    branch: {task.getBranch()}")
-        if issue_type in ["Subtaak", "Taak"]:
-            print(f"    task branch: {task.getTaskBranch()}")
-            print(f"    commit message: {task.message()}")
-        else:
-            print(f"Not a subtaak: {issue_type}")
-        print("----------------")
+        print_jira_issue(JiraEntity(issue))
 
 
 def print_github_issues(profile: dict, alias: str) -> None:
     issues = get_github_issues(profile, alias)
-    print("----------------")
     for issue in issues:
-        task = GitHubIssue(issue)
-        print(f"Issue: {task.getName()}")
-        print(f"    branch: {task.getBranch()}")
-        print(f"    commit message: {task.message()}")
-        print("----------------")
+        print_github_issue(GitHubIssue(issue))
+
+
+def prompt_choice(title: str, options: list[str]) -> int:
+    print(title)
+    for index, label in enumerate(options, start=1):
+        print(f"  {index}. {label}")
+    while True:
+        raw = input(f"Choose [1-{len(options)}]: ").strip()
+        if raw.isdigit():
+            choice = int(raw)
+            if 1 <= choice <= len(options):
+                return choice - 1
+        print("Invalid choice, try again.")
+
+
+def build_alias_options(config: dict) -> tuple[list[str], list[tuple[str, dict]]]:
+    aliases = config.get("aliases", {})
+    default = config.get("default")
+    entries = list(aliases.items())
+    labels = []
+    for name, profile in entries:
+        source = profile.get("source", "?")
+        suffix = "  (default)" if name == default else ""
+        labels.append(f"{name}  [{source}]{suffix}")
+    return labels, entries
+
+
+def fetch_jira_entities(profile: dict, alias: str) -> list[JiraEntity]:
+    tasks = get_jira_tasks(profile, alias)
+    return [JiraEntity(issue) for issue in tasks.get("issues", [])]
+
+
+def fetch_github_entities(profile: dict, alias: str) -> list[GitHubIssue]:
+    return [GitHubIssue(issue) for issue in get_github_issues(profile, alias)]
+
+
+def run_wizard(config: dict) -> None:
+    alias_labels, alias_entries = build_alias_options(config)
+
+    if len(alias_entries) == 1:
+        alias_name, profile = alias_entries[0]
+    else:
+        alias_index = prompt_choice("Select project:", alias_labels)
+        alias_name, profile = alias_entries[alias_index]
+
+    if profile["source"] == "github":
+        items = fetch_github_entities(profile, alias_name)
+        if not items:
+            print(f"No assigned issues found for '{alias_name}'.")
+            return
+
+        if len(items) == 1:
+            print_github_issue(items[0])
+            return
+
+        issue_labels = [item.getName() for item in items]
+        issue_index = prompt_choice("Select issue:", issue_labels)
+        print_github_issue(items[issue_index])
+        return
+
+    items = fetch_jira_entities(profile, alias_name)
+    if not items:
+        print(f"No assigned issues found for '{alias_name}'.")
+        return
+
+    if len(items) == 1:
+        print_jira_issue(items[0])
+        return
+
+    issue_labels = [f"{item.getType()}: {item.getName()}" for item in items]
+    issue_index = prompt_choice("Select issue:", issue_labels)
+    print_jira_issue(items[issue_index])
+
+
+def print_issues_for_profile(alias_name: str, profile: dict) -> None:
+    if profile["source"] == "github":
+        print_github_issues(profile, alias_name)
+    else:
+        print_jira_issues(profile, alias_name)
 
 
 def parse_args() -> argparse.Namespace:
@@ -339,14 +423,22 @@ def main() -> int:
         print_aliases(config)
         return 0
 
-    alias_name, profile = resolve_profile(config, args.alias)
+    try:
+        if args.alias:
+            alias_name, profile = resolve_profile(config, args.alias)
+            print_issues_for_profile(alias_name, profile)
+            return 0
 
-    if profile["source"] == "github":
-        print_github_issues(profile, alias_name)
-    else:
-        print_jira_issues(profile, alias_name)
+        if sys.stdin.isatty():
+            run_wizard(config)
+            return 0
 
-    return 0
+        alias_name, profile = resolve_profile(config, None)
+        print_issues_for_profile(alias_name, profile)
+        return 0
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        return 130
 
 
 if __name__ == "__main__":
