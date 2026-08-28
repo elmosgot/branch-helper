@@ -137,4 +137,13 @@ ruff check branch-helper
 ruff format branch-helper
 ```
 
-CI runs `ruff check` and `ruff format --check` on every push and pull request (see `.github/workflows/ruff.yml`).
+CI runs `ruff check` and `ruff format --check` on every push and pull request (see `.github/workflows/code-quality.yml`).
+
+## Automated pull requests
+
+When you push a branch named `{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`), a **draft PR** is opened automatically against `master`:
+
+- **Title:** `(#N) {issue title}`
+- **Body:** issue description plus `Closes #N`
+
+Branches without a leading issue number are skipped. If a PR already exists for the branch, nothing is created.
