@@ -195,11 +195,24 @@ CI runs `ruff check` and `ruff format --check` on every push and pull request (s
 
 ## Automated pull requests
 
-When you push a branch named `issues/{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`), a **draft PR** is opened automatically against `master`:
+When you push a feature branch, a **draft PR** is opened automatically against `master` if one does not already exist.
+
+### GitHub issues
+
+Branch format: `issues/{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`)
 
 - **Title:** `(#N) {issue title}`
 - **Body:** issue description plus `Closes #N`
 
-Branches that do not match `issues/{number}-{slug}` are skipped. If a PR already exists for the branch, nothing is created.
+### Linear issues
 
-Linear and Jira branch names are not handled by the auto-PR workflow.
+Branch format: `{TEAM}-{number}-{slug}` or `{prefix}/{TEAM}-{number}-{slug}` (e.g. `feature/BRA-1-add-linear-support`)
+
+- **Title:** `(BRA-1) {issue title}`
+- **Body:** issue description plus link to Linear
+
+For sub-issue branches with multiple identifiers (e.g. `ENG-123-ENG-456-implement-login`), the **last** identifier is used (`ENG-456`).
+
+Requires repository secret **`LINEAR_API_KEY`** (Linear personal API key).
+
+Branches that do not match either format are skipped.
