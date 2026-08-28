@@ -25,7 +25,7 @@ For each issue it shows:
 
 For each assigned open issue it shows:
 
-- **branch** — `{number}-{slugified-title}` (e.g. `1-implement-support-for-github-issues`)
+- **branch** — `issues/{number}-{slugified-title}` (e.g. `issues/1-implement-support-for-github-issues`)
 - **commit message** — `(#{number}) {title}` (e.g. `(#1) Implement support for GitHub Issues`)
 
 Branch names are slugified to be git-safe (special characters removed, unicode normalized to ASCII, title segment lowercased).
@@ -141,9 +141,9 @@ CI runs `ruff check` and `ruff format --check` on every push and pull request (s
 
 ## Automated pull requests
 
-When you push a branch named `{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`), a **draft PR** is opened automatically against `master`:
+When you push a branch named `issues/{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`), a **draft PR** is opened automatically against `master`:
 
 - **Title:** `(#N) {issue title}`
 - **Body:** issue description plus `Closes #N`
 
-Branches without a leading issue number are skipped. If a PR already exists for the branch, nothing is created.
+Branches that do not match `issues/{number}-{slug}` are skipped. If a PR already exists for the branch, nothing is created.
