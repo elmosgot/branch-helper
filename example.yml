@@ -1,5 +1,8 @@
 default: project-x
 
+# Per-repo override: create .branch-helper-default in a project root
+# with the alias name on the first line (e.g. elmosgot or project-x).
+
 aliases:
   project-x:
     source: jira

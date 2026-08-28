@@ -32,6 +32,39 @@ from requests.auth import HTTPBasicAuth
 #
 
 CONFIG_PATH = Path.home() / ".config" / "branch-helper" / "config.yml"
+LOCAL_DEFAULT_FILE = ".branch-helper-default"
+
+
+def find_local_default_file() -> Path | None:
+    directory = Path.cwd().resolve()
+    while True:
+        candidate = directory / LOCAL_DEFAULT_FILE
+        if candidate.is_file():
+            return candidate
+        if directory.parent == directory:
+            return None
+        directory = directory.parent
+
+
+def read_local_default() -> tuple[str, Path] | None:
+    path = find_local_default_file()
+    if path is None:
+        return None
+
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        return stripped, path
+
+    return None
+
+
+def get_effective_default(config: dict) -> str | None:
+    local_default = read_local_default()
+    if local_default:
+        return local_default[0]
+    return config.get("default")
 
 
 def slugify(text: str) -> str:
@@ -82,17 +115,26 @@ def resolve_profile(config: dict, alias_name: str | None) -> tuple[str, dict]:
             print(f"Missing 'aliases' section in {CONFIG_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    name = alias_name or config.get("default")
+    name = alias_name or get_effective_default(config)
     if not name:
         print(f"Missing 'default' alias in {CONFIG_PATH}", file=sys.stderr)
         sys.exit(1)
 
     aliases = config.get("aliases")
     if name not in aliases:
-        print(
-            f"Unknown alias '{name}'. Use --list-aliases to see available profiles.",
-            file=sys.stderr,
-        )
+        local_default = read_local_default()
+        if not alias_name and local_default and name == local_default[0]:
+            print(
+                f"Unknown alias '{name}' in {local_default[1]}. "
+                "Use --list-aliases to see available profiles.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"Unknown alias '{name}'. "
+                "Use --list-aliases to see available profiles.",
+                file=sys.stderr,
+            )
         sys.exit(1)
 
     profile = aliases[name]
@@ -116,10 +158,10 @@ def print_aliases(config: dict) -> None:
         print(f"No aliases configured in {CONFIG_PATH}", file=sys.stderr)
         sys.exit(1)
 
-    default = config.get("default")
+    effective_default = get_effective_default(config)
     for name, profile in aliases.items():
         source = profile.get("source", "?")
-        suffix = "  (default)" if name == default else ""
+        suffix = "  (default)" if name == effective_default else ""
         print(f"{name}{suffix}  [{source}]")
 
 
@@ -333,14 +375,32 @@ def prompt_choice(title: str, options: list[str]) -> int:
 
 def build_alias_options(config: dict) -> tuple[list[str], list[tuple[str, dict]]]:
     aliases = config.get("aliases", {})
-    default = config.get("default")
+    effective_default = get_effective_default(config)
     entries = list(aliases.items())
     labels = []
     for name, profile in entries:
         source = profile.get("source", "?")
-        suffix = "  (default)" if name == default else ""
+        suffix = "  (default)" if name == effective_default else ""
         labels.append(f"{name}  [{source}]{suffix}")
     return labels, entries
+
+
+def select_wizard_profile(
+    config: dict,
+) -> tuple[str, dict]:
+    local_default = read_local_default()
+    aliases = config.get("aliases", {})
+
+    if local_default and local_default[0] in aliases:
+        return resolve_profile(config, None)
+
+    alias_labels, alias_entries = build_alias_options(config)
+
+    if len(alias_entries) == 1:
+        return alias_entries[0]
+
+    alias_index = prompt_choice("Select project:", alias_labels)
+    return alias_entries[alias_index]
 
 
 def fetch_jira_entities(profile: dict, alias: str) -> list[JiraEntity]:
@@ -353,13 +413,7 @@ def fetch_github_entities(profile: dict, alias: str) -> list[GitHubIssue]:
 
 
 def run_wizard(config: dict) -> None:
-    alias_labels, alias_entries = build_alias_options(config)
-
-    if len(alias_entries) == 1:
-        alias_name, profile = alias_entries[0]
-    else:
-        alias_index = prompt_choice("Select project:", alias_labels)
-        alias_name, profile = alias_entries[alias_index]
+    alias_name, profile = select_wizard_profile(config)
 
     if profile["source"] == "github":
         items = fetch_github_entities(profile, alias_name)
