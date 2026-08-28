@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/ruff-action@v4.1.0
         with:
-          args: "check branch-helper"
+          args: "check branch_helper bin"
       - uses: astral-sh/ruff-action@v4.1.0
         with:
-          args: "format --check branch-helper"
+          args: "format --check branch_helper bin"
