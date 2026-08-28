@@ -1,0 +1,61 @@
+name: Auto create draft PR
+
+on:
+  push:
+    branches-ignore:
+      - master
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Create draft PR if not exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+
+          if [[ ! "${BRANCH_NAME}" =~ ^issues/([0-9]+)- ]]; then
+            echo "Branch '${BRANCH_NAME}' does not match issues/{number}-{slug}; skipping PR creation."
+            exit 0
+          fi
+
+          ISSUE_NUM="${BASH_REMATCH[1]}"
+
+          echo "Found issue #${ISSUE_NUM} in branch '${BRANCH_NAME}'."
+
+          ISSUE_JSON=$(gh issue view "${ISSUE_NUM}" --json title,body,url)
+          ISSUE_TITLE=$(echo "${ISSUE_JSON}" | jq -r '.title')
+          ISSUE_BODY=$(echo "${ISSUE_JSON}" | jq -r '.body // ""')
+
+          if [ -z "${ISSUE_TITLE}" ] || [ "${ISSUE_TITLE}" = "null" ]; then
+            echo "Issue #${ISSUE_NUM} not found."
+            exit 1
+          fi
+
+          PR_ID=$(gh pr list --head "${BRANCH_NAME}" --base master --json number --jq '.[0].number')
+
+          if [ -n "${PR_ID}" ]; then
+            echo "Pull request #${PR_ID} already exists for '${BRANCH_NAME}'."
+            exit 0
+          fi
+
+          TITLE="(#${ISSUE_NUM}) ${ISSUE_TITLE}"
+          BODY="${ISSUE_BODY}
+
+          Closes #${ISSUE_NUM}"
+
+          echo "Creating draft PR: ${TITLE}"
+          gh pr create \
+            --title "${TITLE}" \
+            --body "${BODY}" \
+            --base master \
+            --head "${BRANCH_NAME}" \
+            --draft

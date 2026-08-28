@@ -279,7 +279,7 @@ class GitHubIssue:
         return f"#{self.getNumber()} {self.getTitle()}"
 
     def getBranch(self) -> str:
-        return f"{self.getNumber()}-{slugify(self.getTitle())}"
+        return f"issues/{self.getNumber()}-{slugify(self.getTitle())}"
 
     def message(self) -> str:
         return f"(#{self.getNumber()}) {self.getTitle()}"
