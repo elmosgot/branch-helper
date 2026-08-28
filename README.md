@@ -126,3 +126,15 @@ sudo install -m 755 branch-helper /usr/local/bin/branch-helper
 ```
 
 The command expects `~/.config/branch-helper/config.yml`. If the file is missing, it prints the expected path and exits.
+
+## Development
+
+Install [Ruff](https://docs.astral.sh/ruff/) and run locally:
+
+```bash
+pip install ruff
+ruff check branch-helper
+ruff format branch-helper
+```
+
+CI runs `ruff check` and `ruff format --check` on every push and pull request (see `.github/workflows/ruff.yml`).
