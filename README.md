@@ -132,27 +132,42 @@ When a local default is set, the interactive wizard skips project selection and 
 ## Install
 
 ```bash
-sudo install -m 755 branch-helper /usr/local/bin/branch-helper
+./install.sh
+```
+
+Or manually:
+
+```bash
+sudo install -m755 bin/branch-helper /usr/local/bin/branch-helper
+sudo cp -r branch_helper /usr/local/share/branch-helper/
 ```
 
 ## Updating
 
-After making changes to the script, reinstall:
+After pulling changes, reinstall:
 
 ```bash
-sudo install -m 755 branch-helper /usr/local/bin/branch-helper
+./install.sh
 ```
 
 The command expects `~/.config/branch-helper/config.yml`. If the file is missing, it prints the expected path and exits.
 
 ## Development
 
+Run from the repo root without installing:
+
+```bash
+python3 -m branch_helper
+python3 -m branch_helper --list-aliases
+python3 -m branch_helper --alias elmosgot
+```
+
 Install [Ruff](https://docs.astral.sh/ruff/) and run locally:
 
 ```bash
 pip install ruff
-ruff check branch-helper
-ruff format branch-helper
+ruff check branch_helper bin
+ruff format branch_helper bin
 ```
 
 CI runs `ruff check` and `ruff format --check` on every push and pull request (see `.github/workflows/code-quality.yml`).
