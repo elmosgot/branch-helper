@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import re
 import sys
 import unicodedata
@@ -20,6 +21,9 @@ from requests.auth import HTTPBasicAuth
 #     read:epic:jira-software
 #     read:project.feature:jira
 #
+# GitHub personal access token scopes:
+#     repo (classic) or fine-grained Issues read access
+#
 # Debian 12 > Run:
 #     apt install python3-yaml python3-requests
 #
@@ -32,12 +36,12 @@ CONFIG_PATH = Path.home() / ".config" / "branch-helper" / "config.yml"
 
 
 def slugify(text: str) -> str:
-	"""Convert Jira summary text into a git-safe branch name segment."""
+	"""Convert issue title text into a git-safe branch name segment."""
 	normalized = unicodedata.normalize("NFKD", text)
 	ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
 	slug = re.sub(r"[^A-Za-z0-9._-]+", "-", ascii_text)
 	slug = re.sub(r"[-.]{2,}", "-", slug)
-	return slug.strip("-.")
+	return slug.strip("-.").lower()
 
 
 def read_config() -> dict:
@@ -47,14 +51,38 @@ def read_config() -> dict:
 
 	with open(CONFIG_PATH) as stream:
 		try:
-			return yaml.safe_load(stream)
+			config = yaml.safe_load(stream)
 		except yaml.YAMLError as error:
 			print(error, file=sys.stderr)
 			sys.exit(1)
 
+	return config or {}
 
-def retrieve(config: dict, endpoint: str, payload: dict) -> dict:
-	jira = config.get('jira')
+
+def require_config_section(config: dict, section: str) -> dict:
+	section_config = config.get(section)
+	if not section_config:
+		print(f"Missing '{section}' section in {CONFIG_PATH}", file=sys.stderr)
+		sys.exit(1)
+
+	return section_config
+
+
+def handle_http_error(error: requests.HTTPError, source: str) -> None:
+	response = error.response
+	if response is not None and response.status_code in (401, 403):
+		print(
+			f"{source} authentication failed ({response.status_code}). "
+			"Check your token and scopes in config.yml.",
+			file=sys.stderr,
+		)
+		sys.exit(1)
+
+	raise error
+
+
+def retrieve_jira(config: dict, endpoint: str, payload: dict) -> dict:
+	jira = require_config_section(config, "jira")
 	api_url = f"https://{jira.get('domain')}/rest/api/3/{endpoint}"
 	headers = {
 		"Accept": "application/json",
@@ -62,18 +90,22 @@ def retrieve(config: dict, endpoint: str, payload: dict) -> dict:
 	}
 	auth = HTTPBasicAuth(jira.get("username"), jira.get("token"))
 
-	response = requests.post(
-		api_url,
-		headers=headers,
-		auth=auth,
-		json=payload
-	)
-	response.raise_for_status()
+	try:
+		response = requests.post(
+			api_url,
+			headers=headers,
+			auth=auth,
+			json=payload,
+			timeout=30,
+		)
+		response.raise_for_status()
+	except requests.HTTPError as error:
+		handle_http_error(error, "Jira")
 
 	return response.json()
 
 
-def get_tasks(config: dict) -> dict:
+def get_jira_tasks(config: dict) -> dict:
 	payload = {
 		"jql": (
 			"assignee = currentUser() "
@@ -84,7 +116,44 @@ def get_tasks(config: dict) -> dict:
 		"maxResults": 100
 	}
 
-	return retrieve(config, "search/jql", payload)
+	return retrieve_jira(config, "search/jql", payload)
+
+
+def get_github_issues(config: dict) -> list[dict]:
+	github = require_config_section(config, "github")
+	token = github.get("token")
+	headers = {
+		"Accept": "application/vnd.github+json",
+		"Authorization": f"Bearer {token}",
+		"X-GitHub-Api-Version": "2022-11-28",
+	}
+	query = "is:issue is:open assignee:@me"
+	issues = []
+	page = 1
+
+	while True:
+		try:
+			response = requests.get(
+				"https://api.github.com/search/issues",
+				headers=headers,
+				params={"q": query, "per_page": 100, "page": page},
+				timeout=30,
+			)
+			response.raise_for_status()
+		except requests.HTTPError as error:
+			handle_http_error(error, "GitHub")
+
+		payload = response.json()
+		issues.extend(payload.get("items", []))
+
+		if len(issues) >= payload.get("total_count", 0):
+			break
+		if not payload.get("items"):
+			break
+
+		page += 1
+
+	return issues
 
 
 class Entity:
@@ -141,11 +210,30 @@ class JiraEntity(Entity):
 		return f"{self.parent.getId()}-{self.getId()}-{slugify(title)}"
 
 
-def main() -> int:
-	config = read_config()
-	tasks = get_tasks(config)
+class GitHubIssue:
+	def __init__(self, data: dict):
+		self.data = data
+
+	def getNumber(self) -> int:
+		return self.data.get("number")
+
+	def getTitle(self) -> str:
+		return self.data.get("title", "")
+
+	def getName(self) -> str:
+		return f"#{self.getNumber()} {self.getTitle()}"
+
+	def getBranch(self) -> str:
+		return f"{self.getNumber()}-{slugify(self.getTitle())}"
+
+	def message(self) -> str:
+		return f"(#{self.getNumber()}) {self.getTitle()}"
+
+
+def print_jira_issues(config: dict) -> None:
+	tasks = get_jira_tasks(config)
 	print("----------------")
-	for issue in tasks.get("issues"):
+	for issue in tasks.get("issues", []):
 		task = JiraEntity(issue)
 		type = task.getType()
 
@@ -157,6 +245,45 @@ def main() -> int:
 		else:
 			print(f"Not a subtaak: {type}")
 		print("----------------")
+
+
+def print_github_issues(config: dict) -> None:
+	issues = get_github_issues(config)
+	print("----------------")
+	for issue in issues:
+		task = GitHubIssue(issue)
+		print(f"Issue: {task.getName()}")
+		print(f"    branch: {task.getBranch()}")
+		print(f"    commit message: {task.message()}")
+		print("----------------")
+
+
+def parse_args() -> argparse.Namespace:
+	parser = argparse.ArgumentParser(
+		description="List assigned issues and print suggested branch names and commit messages."
+	)
+	group = parser.add_mutually_exclusive_group()
+	group.add_argument(
+		"--jira",
+		action="store_true",
+		help="List assigned Jira issues (default)",
+	)
+	group.add_argument(
+		"--github",
+		action="store_true",
+		help="List assigned open GitHub issues",
+	)
+	return parser.parse_args()
+
+
+def main() -> int:
+	args = parse_args()
+	config = read_config()
+
+	if args.github:
+		print_github_issues(config)
+	else:
+		print_jira_issues(config)
 
 	return 0
 
