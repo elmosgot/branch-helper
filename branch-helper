@@ -59,13 +59,67 @@ def read_config() -> dict:
 	return config or {}
 
 
-def require_config_section(config: dict, section: str) -> dict:
-	section_config = config.get(section)
+def require_config_section(profile: dict, section: str, alias: str) -> dict:
+	section_config = profile.get(section)
 	if not section_config:
-		print(f"Missing '{section}' section in {CONFIG_PATH}", file=sys.stderr)
+		print(
+			f"Alias '{alias}' is missing '{section}' config block in {CONFIG_PATH}",
+			file=sys.stderr,
+		)
 		sys.exit(1)
 
 	return section_config
+
+
+def resolve_profile(config: dict, alias_name: Optional[str]) -> tuple[str, dict]:
+	if not config.get("aliases"):
+		if config.get("jira") or config.get("github"):
+			print(
+				"Config uses the old flat format. Migrate to aliases — see example.yml.",
+				file=sys.stderr,
+			)
+		else:
+			print(f"Missing 'aliases' section in {CONFIG_PATH}", file=sys.stderr)
+		sys.exit(1)
+
+	name = alias_name or config.get("default")
+	if not name:
+		print(f"Missing 'default' alias in {CONFIG_PATH}", file=sys.stderr)
+		sys.exit(1)
+
+	aliases = config.get("aliases")
+	if name not in aliases:
+		print(
+			f"Unknown alias '{name}'. Use --list-aliases to see available profiles.",
+			file=sys.stderr,
+		)
+		sys.exit(1)
+
+	profile = aliases[name]
+	source = profile.get("source")
+	if source not in ("jira", "github"):
+		print(
+			f"Alias '{name}' has invalid source '{source}'. Must be 'jira' or 'github'.",
+			file=sys.stderr,
+		)
+		sys.exit(1)
+
+	require_config_section(profile, source, name)
+
+	return name, profile
+
+
+def print_aliases(config: dict) -> None:
+	aliases = config.get("aliases")
+	if not aliases:
+		print(f"No aliases configured in {CONFIG_PATH}", file=sys.stderr)
+		sys.exit(1)
+
+	default = config.get("default")
+	for name, profile in aliases.items():
+		source = profile.get("source", "?")
+		suffix = "  (default)" if name == default else ""
+		print(f"{name}{suffix}  [{source}]")
 
 
 def handle_http_error(error: requests.HTTPError, source: str) -> None:
@@ -81,8 +135,8 @@ def handle_http_error(error: requests.HTTPError, source: str) -> None:
 	raise error
 
 
-def retrieve_jira(config: dict, endpoint: str, payload: dict) -> dict:
-	jira = require_config_section(config, "jira")
+def retrieve_jira(profile: dict, alias: str, endpoint: str, payload: dict) -> dict:
+	jira = require_config_section(profile, "jira", alias)
 	api_url = f"https://{jira.get('domain')}/rest/api/3/{endpoint}"
 	headers = {
 		"Accept": "application/json",
@@ -105,7 +159,7 @@ def retrieve_jira(config: dict, endpoint: str, payload: dict) -> dict:
 	return response.json()
 
 
-def get_jira_tasks(config: dict) -> dict:
+def get_jira_tasks(profile: dict, alias: str) -> dict:
 	payload = {
 		"jql": (
 			"assignee = currentUser() "
@@ -116,11 +170,11 @@ def get_jira_tasks(config: dict) -> dict:
 		"maxResults": 100
 	}
 
-	return retrieve_jira(config, "search/jql", payload)
+	return retrieve_jira(profile, alias, "search/jql", payload)
 
 
-def get_github_issues(config: dict) -> list[dict]:
-	github = require_config_section(config, "github")
+def get_github_issues(profile: dict, alias: str) -> list[dict]:
+	github = require_config_section(profile, "github", alias)
 	token = github.get("token")
 	headers = {
 		"Accept": "application/vnd.github+json",
@@ -230,8 +284,8 @@ class GitHubIssue:
 		return f"(#{self.getNumber()}) {self.getTitle()}"
 
 
-def print_jira_issues(config: dict) -> None:
-	tasks = get_jira_tasks(config)
+def print_jira_issues(profile: dict, alias: str) -> None:
+	tasks = get_jira_tasks(profile, alias)
 	print("----------------")
 	for issue in tasks.get("issues", []):
 		task = JiraEntity(issue)
@@ -247,8 +301,8 @@ def print_jira_issues(config: dict) -> None:
 		print("----------------")
 
 
-def print_github_issues(config: dict) -> None:
-	issues = get_github_issues(config)
+def print_github_issues(profile: dict, alias: str) -> None:
+	issues = get_github_issues(profile, alias)
 	print("----------------")
 	for issue in issues:
 		task = GitHubIssue(issue)
@@ -262,16 +316,14 @@ def parse_args() -> argparse.Namespace:
 	parser = argparse.ArgumentParser(
 		description="List assigned issues and print suggested branch names and commit messages."
 	)
-	group = parser.add_mutually_exclusive_group()
-	group.add_argument(
-		"--jira",
-		action="store_true",
-		help="List assigned Jira issues (default)",
+	parser.add_argument(
+		"--alias",
+		help="Named profile from config (overrides default)",
 	)
-	group.add_argument(
-		"--github",
+	parser.add_argument(
+		"--list-aliases",
 		action="store_true",
-		help="List assigned open GitHub issues",
+		help="List configured aliases",
 	)
 	return parser.parse_args()
 
@@ -280,10 +332,16 @@ def main() -> int:
 	args = parse_args()
 	config = read_config()
 
-	if args.github:
-		print_github_issues(config)
+	if args.list_aliases:
+		print_aliases(config)
+		return 0
+
+	alias_name, profile = resolve_profile(config, args.alias)
+
+	if profile["source"] == "github":
+		print_github_issues(profile, alias_name)
 	else:
-		print_jira_issues(config)
+		print_jira_issues(profile, alias_name)
 
 	return 0
 

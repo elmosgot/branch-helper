@@ -1,7 +1,14 @@
-jira:
-    domain: "your-org.atlassian.net"
-    username: "you@example.com"
-    token: "your-jira-api-token"
+default: project-x
 
-github:
-    token: "ghp_your-github-personal-access-token"
+aliases:
+  project-x:
+    source: jira
+    jira:
+      domain: "your-org.atlassian.net"
+      username: "you@example.com"
+      token: "your-jira-api-token"
+
+  elmosgot:
+    source: github
+    github:
+      token: "ghp_your-github-personal-access-token"
