@@ -1,6 +1,6 @@
 # branch-helper
 
-CLI tool that lists your assigned issues from Jira or GitHub and prints suggested git branch names and commit messages.
+CLI tool that lists your assigned issues from Jira, GitHub, or Linear and prints suggested git branch names and commit messages.
 
 Each project context is a named **alias** in config — source type and credentials combined. Use `--alias` to switch between them.
 
@@ -10,6 +10,7 @@ Each project context is a named **alias** in config — source type and credenti
 branch-helper                          # interactive wizard (TTY): pick project, pick issue
 branch-helper --alias project-x         # list all assigned issues for Jira project
 branch-helper --alias elmosgot         # list all assigned issues for GitHub
+branch-helper --alias my-linear        # list all assigned issues for Linear
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
@@ -31,6 +32,14 @@ For each assigned open issue it shows:
 
 - **branch** — `issues/{number}-{slugified-title}` (e.g. `issues/1-implement-support-for-github-issues`)
 - **commit message** — `(#{number}) {title}` (e.g. `(#1) Implement support for GitHub Issues`)
+
+### Linear output
+
+For each assigned open issue it shows:
+
+- **branch** — story branch name (`{identifier}-{slugified-title}`, e.g. `ENG-123-add-auth-flow`)
+- **task branch** — for sub-issues: `{parent}-{child}-{slugified-title}` (e.g. `ENG-123-ENG-456-implement-login`)
+- **commit message** — `({identifier}) {title}` (e.g. `(ENG-456) Implement login`)
 
 Branch names are slugified to be git-safe (special characters removed, unicode normalized to ASCII, title segment lowercased).
 
@@ -69,6 +78,12 @@ Create a personal access token with:
 - **Classic token:** `repo` scope
 - **Fine-grained token:** Issues read access on the repos you use
 
+## Linear API key
+
+Create a personal API key in Linear under **Settings > Security & access > Personal API keys**.
+
+The key is passed as the `Authorization` header value (no `Bearer` prefix).
+
 ## Configuration
 
 The CLI reads `~/.config/branch-helper/config.yml`. Copy `example.yml` as a starting point:
@@ -88,12 +103,18 @@ aliases:
     source: github
     github:
       token: "ghp_your-github-personal-access-token"
+
+  my-linear:
+    source: linear
+    linear:
+      token: "lin_api_your-personal-api-key"
 ```
 
 - `default` — alias used when `--alias` is omitted and no `.branch-helper-default` is found
-- `aliases.<name>.source` — `jira` or `github`
+- `aliases.<name>.source` — `jira`, `github`, or `linear`
 - `aliases.<name>.jira` — Jira domain, username, token
 - `aliases.<name>.github` — GitHub token
+- `aliases.<name>.linear` — Linear personal API key
 
 ## Per-project default
 
@@ -174,9 +195,24 @@ CI runs `ruff check` and `ruff format --check` on every push and pull request (s
 
 ## Automated pull requests
 
-When you push a branch named `issues/{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`), a **draft PR** is opened automatically against `master`:
+When you push a feature branch, a **draft PR** is opened automatically against `master` if one does not already exist.
+
+### GitHub issues
+
+Branch format: `issues/{number}-{slug}` (as suggested by `branch-helper --alias elmosgot`)
 
 - **Title:** `(#N) {issue title}`
 - **Body:** issue description plus `Closes #N`
 
-Branches that do not match `issues/{number}-{slug}` are skipped. If a PR already exists for the branch, nothing is created.
+### Linear issues
+
+Branch format: `{TEAM}-{number}-{slug}` or `{prefix}/{TEAM}-{number}-{slug}` (e.g. `feature/BRA-1-add-linear-support`)
+
+- **Title:** `(BRA-1) {issue title}`
+- **Body:** issue description plus link to Linear
+
+For sub-issue branches with multiple identifiers (e.g. `ENG-123-ENG-456-implement-login`), the **last** identifier is used (`ENG-456`).
+
+Requires repository secret **`LINEAR_API_KEY`** (Linear personal API key).
+
+Branches that do not match either format are skipped.

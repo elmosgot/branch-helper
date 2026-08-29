@@ -15,3 +15,8 @@ aliases:
     source: github
     github:
       token: "ghp_your-github-personal-access-token"
+
+  my-linear:
+    source: linear
+    linear:
+      token: "lin_api_your-personal-api-key"
