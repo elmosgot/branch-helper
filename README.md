@@ -14,7 +14,7 @@ branch-helper --alias my-linear        # list all assigned issues for Linear
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
-On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. If you have only one project or one issue, that step is skipped automatically.
+On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. You can then create and check out the suggested git branch from the alias’s configured `base_branch`. If you have only one project or one issue, that step is skipped automatically.
 
 Use `--alias` when you want a non-interactive list of all assigned issues for a specific project.
 
@@ -94,6 +94,7 @@ default: project-x
 aliases:
   project-x:
     source: jira
+    base_branch: main
     jira:
       domain: "your-org.atlassian.net"
       username: "you@example.com"
@@ -101,17 +102,20 @@ aliases:
 
   elmosgot:
     source: github
+    base_branch: master
     github:
       token: "ghp_your-github-personal-access-token"
 
   my-linear:
     source: linear
+    base_branch: master
     linear:
       token: "lin_api_your-personal-api-key"
 ```
 
 - `default` — alias used when `--alias` is omitted and no `.branch-helper-default` is found
 - `aliases.<name>.source` — `jira`, `github`, or `linear`
+- `aliases.<name>.base_branch` — default branch to create feature branches from (e.g. `main`, `master`); required for wizard branch creation
 - `aliases.<name>.jira` — Jira domain, username, token
 - `aliases.<name>.github` — GitHub token
 - `aliases.<name>.linear` — Linear personal API key

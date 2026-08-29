@@ -6,6 +6,7 @@ default: project-x
 aliases:
   project-x:
     source: jira
+    base_branch: main
     jira:
       domain: "your-org.atlassian.net"
       username: "you@example.com"
@@ -13,10 +14,12 @@ aliases:
 
   elmosgot:
     source: github
+    base_branch: master
     github:
       token: "ghp_your-github-personal-access-token"
 
   my-linear:
     source: linear
+    base_branch: master
     linear:
       token: "lin_api_your-personal-api-key"
