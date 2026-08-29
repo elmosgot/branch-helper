@@ -4,7 +4,6 @@ import requests
 
 from branch_helper.config import require_config_section
 from branch_helper.http_errors import handle_http_error
-from branch_helper.slugify import slugify
 
 LINEAR_API_URL = "https://api.linear.app/graphql"
 
@@ -32,44 +31,6 @@ query AssignedIssues($cursor: String) {
   }
 }
 """
-
-
-class LinearIssue:
-    def __init__(self, data: dict):
-        self.data = data
-        parent = data.get("parent")
-        self.parent = LinearIssue(parent) if parent else None
-
-    def getIdentifier(self) -> str:
-        return self.data.get("identifier", "")
-
-    def getTitle(self) -> str:
-        return self.data.get("title", "")
-
-    def getName(self) -> str:
-        return f"{self.getIdentifier()} {self.getTitle()}"
-
-    def hasParent(self) -> bool:
-        return self.parent is not None
-
-    def getParent(self) -> "LinearIssue | None":
-        return self.parent
-
-    def getBranch(self) -> str:
-        base = self.parent if self.hasParent() else self
-        return f"{base.getIdentifier()}-{slugify(base.getTitle())}"
-
-    def getTaskBranch(self) -> str:
-        if not self.hasParent():
-            return "no-parent"
-
-        return (
-            f"{self.parent.getIdentifier()}-"
-            f"{self.getIdentifier()}-{slugify(self.getTitle())}"
-        )
-
-    def message(self) -> str:
-        return f"({self.getIdentifier()}) {self.getTitle()}"
 
 
 def query_linear(
@@ -128,7 +89,3 @@ def get_linear_issues(profile: dict, alias: str) -> list[dict]:
             break
 
     return issues
-
-
-def fetch_linear_entities(profile: dict, alias: str) -> list[LinearIssue]:
-    return [LinearIssue(issue) for issue in get_linear_issues(profile, alias)]

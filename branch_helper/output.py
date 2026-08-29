@@ -1,66 +1,24 @@
-from branch_helper.github import GitHubIssue, get_github_issues
-from branch_helper.jira import JiraEntity, get_jira_tasks
-from branch_helper.linear import LinearIssue, get_linear_issues
+from branch_helper.sources import get_source
+from branch_helper.sources.base import Issue
 
 
-def print_jira_issue(task: JiraEntity) -> None:
-    issue_type = task.getType()
+def print_issue(issue: Issue) -> None:
     print("----------------")
-    print(f"{issue_type}: {task.getName()}")
-    print(f"    branch: {task.getBranch()}")
-    if issue_type in ["Subtaak", "Taak"]:
-        print(f"    task branch: {task.getTaskBranch()}")
-        print(f"    commit message: {task.message()}")
-    else:
-        print(f"Not a subtaak: {issue_type}")
+    print(issue.label())
+    print(f"    branch: {issue.branch()}")
+    task_branch = issue.task_branch()
+    if task_branch is not None:
+        print(f"    task branch: {task_branch}")
+    commit_message = issue.commit_message()
+    if commit_message is not None:
+        print(f"    commit message: {commit_message}")
+    note = issue.note()
+    if note is not None:
+        print(note)
     print("----------------")
-
-
-def print_github_issue(task: GitHubIssue) -> None:
-    print("----------------")
-    print(f"Issue: {task.getName()}")
-    print(f"    branch: {task.getBranch()}")
-    print(f"    commit message: {task.message()}")
-    print("----------------")
-
-
-def print_linear_issue(task: LinearIssue) -> None:
-    print("----------------")
-    if task.hasParent():
-        print(f"Sub-issue: {task.getName()}")
-        print(f"    branch: {task.getBranch()}")
-        print(f"    task branch: {task.getTaskBranch()}")
-        print(f"    commit message: {task.message()}")
-    else:
-        print(f"Issue: {task.getName()}")
-        print(f"    branch: {task.getBranch()}")
-        print(f"    commit message: {task.message()}")
-    print("----------------")
-
-
-def print_jira_issues(profile: dict, alias: str) -> None:
-    tasks = get_jira_tasks(profile, alias)
-    for issue in tasks.get("issues", []):
-        print_jira_issue(JiraEntity(issue))
-
-
-def print_github_issues(profile: dict, alias: str) -> None:
-    issues = get_github_issues(profile, alias)
-    for issue in issues:
-        print_github_issue(GitHubIssue(issue))
-
-
-def print_linear_issues(profile: dict, alias: str) -> None:
-    issues = get_linear_issues(profile, alias)
-    for issue in issues:
-        print_linear_issue(LinearIssue(issue))
 
 
 def print_issues_for_profile(alias_name: str, profile: dict) -> None:
-    source = profile["source"]
-    if source == "github":
-        print_github_issues(profile, alias_name)
-    elif source == "linear":
-        print_linear_issues(profile, alias_name)
-    else:
-        print_jira_issues(profile, alias_name)
+    source = get_source(profile, alias_name)
+    for issue in source.fetch_issues():
+        print_issue(issue)

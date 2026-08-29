@@ -2,27 +2,6 @@ import requests
 
 from branch_helper.config import require_config_section
 from branch_helper.http_errors import handle_http_error
-from branch_helper.slugify import slugify
-
-
-class GitHubIssue:
-    def __init__(self, data: dict):
-        self.data = data
-
-    def getNumber(self) -> int:
-        return self.data.get("number")
-
-    def getTitle(self) -> str:
-        return self.data.get("title", "")
-
-    def getName(self) -> str:
-        return f"#{self.getNumber()} {self.getTitle()}"
-
-    def getBranch(self) -> str:
-        return f"issues/{self.getNumber()}-{slugify(self.getTitle())}"
-
-    def message(self) -> str:
-        return f"(#{self.getNumber()}) {self.getTitle()}"
 
 
 def get_github_issues(profile: dict, alias: str) -> list[dict]:
@@ -60,7 +39,3 @@ def get_github_issues(profile: dict, alias: str) -> list[dict]:
         page += 1
 
     return issues
-
-
-def fetch_github_entities(profile: dict, alias: str) -> list[GitHubIssue]:
-    return [GitHubIssue(issue) for issue in get_github_issues(profile, alias)]

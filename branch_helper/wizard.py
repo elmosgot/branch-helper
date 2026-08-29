@@ -3,14 +3,8 @@ from branch_helper.config import (
     read_local_default,
     resolve_profile,
 )
-from branch_helper.github import fetch_github_entities
-from branch_helper.jira import fetch_jira_entities
-from branch_helper.linear import fetch_linear_entities
-from branch_helper.output import (
-    print_github_issue,
-    print_jira_issue,
-    print_linear_issue,
-)
+from branch_helper.output import print_issue
+from branch_helper.sources import get_source
 
 
 def prompt_choice(title: str, options: list[str]) -> int:
@@ -54,55 +48,19 @@ def select_wizard_profile(config: dict) -> tuple[str, dict]:
     return alias_entries[alias_index]
 
 
-def linear_issue_label(item) -> str:
-    if item.hasParent():
-        return f"Sub-issue: {item.getName()}"
-    return item.getName()
-
-
 def run_wizard(config: dict) -> None:
     alias_name, profile = select_wizard_profile(config)
-    source = profile["source"]
+    source = get_source(profile, alias_name)
+    items = source.fetch_issues()
 
-    if source == "github":
-        items = fetch_github_entities(profile, alias_name)
-        if not items:
-            print(f"No assigned issues found for '{alias_name}'.")
-            return
-
-        if len(items) == 1:
-            print_github_issue(items[0])
-            return
-
-        issue_labels = [item.getName() for item in items]
-        issue_index = prompt_choice("Select issue:", issue_labels)
-        print_github_issue(items[issue_index])
-        return
-
-    if source == "linear":
-        items = fetch_linear_entities(profile, alias_name)
-        if not items:
-            print(f"No assigned issues found for '{alias_name}'.")
-            return
-
-        if len(items) == 1:
-            print_linear_issue(items[0])
-            return
-
-        issue_labels = [linear_issue_label(item) for item in items]
-        issue_index = prompt_choice("Select issue:", issue_labels)
-        print_linear_issue(items[issue_index])
-        return
-
-    items = fetch_jira_entities(profile, alias_name)
     if not items:
         print(f"No assigned issues found for '{alias_name}'.")
         return
 
     if len(items) == 1:
-        print_jira_issue(items[0])
+        print_issue(items[0])
         return
 
-    issue_labels = [f"{item.getType()}: {item.getName()}" for item in items]
+    issue_labels = [item.label() for item in items]
     issue_index = prompt_choice("Select issue:", issue_labels)
-    print_jira_issue(items[issue_index])
+    print_issue(items[issue_index])
