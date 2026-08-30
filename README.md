@@ -14,7 +14,14 @@ branch-helper --alias my-linear        # list all assigned issues for Linear
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
-On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. You can then create and check out the suggested git branch from the alias’s configured `base_branch`. If you have only one project or one issue, that step is skipped automatically.
+On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. You can then create and check out the suggested git branch:
+
+- **Story / GitHub issues** — created from the alias’s `base_branch` (or `.branch-helper-default`)
+- **Jira / Linear tasks** — created from the story branch; the story branch is ensured first (from `base_branch` if missing)
+- **New branches** — created with `--no-track`, then pushed with `git push -u origin <branch>` so upstream is `origin/<branch>`, not master
+- **Dirty working tree** — prompts to stash before switching; restores stash after checkout
+
+If you have only one project or one issue, selection steps are skipped automatically.
 
 Use `--alias` when you want a non-interactive list of all assigned issues for a specific project.
 
