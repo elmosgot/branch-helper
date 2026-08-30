@@ -16,8 +16,49 @@ def is_git_repo() -> bool:
     return result.returncode == 0
 
 
+def _local_branch_names() -> list[str]:
+    result = _run_git(
+        ["for-each-ref", "--format=%(refname:short)", "refs/heads/"],
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def _remote_branch_names() -> list[str]:
+    result = _run_git(
+        ["for-each-ref", "--format=%(refname:short)", "refs/remotes/origin/"],
+        check=False,
+    )
+    if result.returncode != 0:
+        return []
+    prefix = "origin/"
+    names = []
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped == "origin/HEAD":
+            continue
+        if stripped.startswith(prefix):
+            names.append(stripped[len(prefix) :])
+    return names
+
+
+def _find_branch_case_insensitive(name: str, branches: list[str]) -> str | None:
+    target = name.casefold()
+    for branch in branches:
+        if branch.casefold() == target:
+            return branch
+    return None
+
+
 def branch_exists(name: str) -> bool:
-    return _local_branch_exists(name) or _remote_branch_exists(name)
+    if _local_branch_exists(name) or _remote_branch_exists(name):
+        return True
+    return (
+        _find_branch_case_insensitive(name, _local_branch_names()) is not None
+        or _find_branch_case_insensitive(name, _remote_branch_names()) is not None
+    )
 
 
 def _local_branch_exists(name: str) -> bool:
@@ -67,11 +108,36 @@ def ensure_branch(name: str, base_branch: str) -> None:
             _git_fail(checkout, f"Failed to checkout '{name}'.")
         return
 
+    local_match = _find_branch_case_insensitive(name, _local_branch_names())
+    if local_match is not None:
+        print(
+            f"Checking out existing branch '{local_match}' "
+            f"(matches '{name}' ignoring case)."
+        )
+        checkout = _run_git(["checkout", local_match], check=False)
+        if checkout.returncode != 0:
+            _git_fail(checkout, f"Failed to checkout '{local_match}'.")
+        return
+
     if _remote_branch_exists(name):
         print(f"Checking out remote branch 'origin/{name}'.")
         checkout = _run_git(["checkout", "-b", name, f"origin/{name}"], check=False)
         if checkout.returncode != 0:
             _git_fail(checkout, f"Failed to checkout 'origin/{name}'.")
+        return
+
+    remote_match = _find_branch_case_insensitive(name, _remote_branch_names())
+    if remote_match is not None:
+        print(
+            f"Checking out remote branch 'origin/{remote_match}' "
+            f"(matches '{name}' ignoring case)."
+        )
+        checkout = _run_git(
+            ["checkout", "-b", remote_match, f"origin/{remote_match}"],
+            check=False,
+        )
+        if checkout.returncode != 0:
+            _git_fail(checkout, f"Failed to checkout 'origin/{remote_match}'.")
         return
 
     if _remote_branch_exists(base_branch):

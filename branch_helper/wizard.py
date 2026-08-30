@@ -1,8 +1,10 @@
 import sys
 
 from branch_helper.config import (
+    CONFIG_PATH,
     get_effective_default,
     read_local_default,
+    resolve_base_branch,
     resolve_profile,
 )
 from branch_helper.git_ops import ensure_branch
@@ -65,14 +67,24 @@ def select_wizard_profile(config: dict) -> tuple[str, dict]:
     return alias_entries[alias_index]
 
 
-def maybe_create_branch(selected: Issue, profile: dict) -> None:
+def print_missing_base_branch_error(alias_name: str) -> None:
+    print("Cannot create branch: no base_branch configured.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print(f"Set it in {CONFIG_PATH}:", file=sys.stderr)
+    print("  aliases:", file=sys.stderr)
+    print(f"    {alias_name}:", file=sys.stderr)
+    print("      base_branch: master", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Or in .branch-helper-default (repo root):", file=sys.stderr)
+    print(f"  {alias_name}", file=sys.stderr)
+    print("  base_branch: master", file=sys.stderr)
+
+
+def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None:
     branch_name = selected.task_branch() or selected.branch()
-    base_branch = profile.get("base_branch")
+    base_branch = resolve_base_branch(profile)
     if not base_branch:
-        print(
-            "Cannot create branch: alias needs 'base_branch' in config.",
-            file=sys.stderr,
-        )
+        print_missing_base_branch_error(alias_name)
         return
 
     if not prompt_yes_no(
@@ -83,9 +95,9 @@ def maybe_create_branch(selected: Issue, profile: dict) -> None:
     ensure_branch(branch_name, base_branch)
 
 
-def finish_issue(selected: Issue, profile: dict) -> None:
+def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
     print_issue(selected)
-    maybe_create_branch(selected, profile)
+    maybe_create_branch(selected, profile, alias_name)
 
 
 def run_wizard(config: dict) -> None:
@@ -98,9 +110,9 @@ def run_wizard(config: dict) -> None:
         return
 
     if len(items) == 1:
-        finish_issue(items[0], profile)
+        finish_issue(items[0], profile, alias_name)
         return
 
     issue_labels = [item.label() for item in items]
     issue_index = prompt_choice("Select issue:", issue_labels)
-    finish_issue(items[issue_index], profile)
+    finish_issue(items[issue_index], profile, alias_name)

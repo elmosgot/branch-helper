@@ -24,13 +24,13 @@ class LinearIssue(Issue):
 
     def branch(self) -> str:
         base = self.parent if self.hasParent() else self
-        return f"{base.getIdentifier()}-{slugify(base.getTitle())}"
+        return f"feature/{base.getIdentifier()}-{slugify(base.getTitle())}"
 
     def task_branch(self) -> str | None:
         if not self.hasParent():
             return None
         return (
-            f"{self.parent.getIdentifier()}-"
+            f"feature/{self.parent.getIdentifier()}-"
             f"{self.getIdentifier()}-{slugify(self.getTitle())}"
         )
 

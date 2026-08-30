@@ -1,10 +1,18 @@
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
 CONFIG_PATH = Path.home() / ".config" / "branch-helper" / "config.yml"
 LOCAL_DEFAULT_FILE = ".branch-helper-default"
+
+
+@dataclass(frozen=True)
+class LocalSettings:
+    path: Path
+    alias: str | None = None
+    base_branch: str | None = None
 
 
 def find_local_default_file() -> Path | None:
@@ -18,17 +26,61 @@ def find_local_default_file() -> Path | None:
         directory = directory.parent
 
 
-def read_local_default() -> tuple[str, Path] | None:
+def _parse_key_value_line(line: str) -> tuple[str, str] | None:
+    for separator in (":", "="):
+        if separator not in line:
+            continue
+        key, _, value = line.partition(separator)
+        key = key.strip()
+        value = value.strip()
+        if key and value:
+            return key, value
+    return None
+
+
+def read_local_settings() -> LocalSettings | None:
     path = find_local_default_file()
     if path is None:
         return None
+
+    alias: str | None = None
+    base_branch: str | None = None
 
     for line in path.read_text().splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        return stripped, path
 
+        parsed = _parse_key_value_line(stripped)
+        if parsed:
+            key, value = parsed
+            if key == "base_branch":
+                base_branch = value
+            continue
+
+        if alias is None:
+            alias = stripped
+
+    if alias is None and base_branch is None:
+        return None
+
+    return LocalSettings(path=path, alias=alias, base_branch=base_branch)
+
+
+def read_local_default() -> tuple[str, Path] | None:
+    settings = read_local_settings()
+    if settings is None or settings.alias is None:
+        return None
+    return settings.alias, settings.path
+
+
+def resolve_base_branch(profile: dict) -> str | None:
+    settings = read_local_settings()
+    if settings and settings.base_branch:
+        return settings.base_branch
+    value = profile.get("base_branch")
+    if value:
+        return str(value)
     return None
 
 
