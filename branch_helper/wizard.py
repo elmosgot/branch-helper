@@ -18,6 +18,7 @@ from branch_helper.git_ops import (
 from branch_helper.output import print_issue
 from branch_helper.sources import get_source
 from branch_helper.sources.issue import Issue
+from branch_helper.staging_screen import run_staging_screen
 
 
 def prompt_choice(title: str, options: list[str]) -> int:
@@ -155,6 +156,7 @@ def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None
 def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
     print_issue(selected)
     maybe_create_branch(selected, profile, alias_name)
+    run_staging_screen(selected)
 
 
 def run_wizard(config: dict) -> None:
