@@ -1,5 +1,5 @@
-from branch_helper.sources.base import IssueSource
 from branch_helper.sources.github import GitHubSource
+from branch_helper.sources.issue_source import IssueSource
 from branch_helper.sources.jira import JiraSource
 from branch_helper.sources.linear import LinearSource
 

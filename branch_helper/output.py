@@ -1,5 +1,5 @@
 from branch_helper.sources import get_source
-from branch_helper.sources.base import Issue
+from branch_helper.sources.issue import Issue
 
 
 def print_issue(issue: Issue) -> None:

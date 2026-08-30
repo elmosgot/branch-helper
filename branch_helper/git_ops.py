@@ -1,6 +1,7 @@
 import subprocess
 import sys
-from dataclasses import dataclass
+
+from branch_helper.ensure_branch_result import EnsureBranchResult
 
 
 def _run_git(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
@@ -62,12 +63,6 @@ def stash_pop() -> bool:
         )
         return False
     return True
-
-
-@dataclass(frozen=True)
-class EnsureBranchResult:
-    created: bool
-    checked_out: bool
 
 
 def _local_branch_names() -> list[str]:

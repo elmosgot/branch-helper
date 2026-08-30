@@ -17,7 +17,7 @@ from branch_helper.git_ops import (
 )
 from branch_helper.output import print_issue
 from branch_helper.sources import get_source
-from branch_helper.sources.base import Issue
+from branch_helper.sources.issue import Issue
 
 
 def prompt_choice(title: str, options: list[str]) -> int:
