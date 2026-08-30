@@ -32,14 +32,14 @@ For each issue it shows:
 
 - **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `feature/PROJ-123-add-pest-testing`)
 - **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues (e.g. `feature/PROJ-123-PROJ-456-add-tests`)
-- **commit message** — formatted as `KEY summary` (e.g. `PROJ-456 Add tests`)
+- **commit message** — formatted as `(KEY) summary` (e.g. `(PROJ-456) Add tests`)
 
 ### GitHub output
 
 For each assigned open issue it shows:
 
 - **branch** — `issues/{number}-{slugified-title}` (e.g. `issues/1-implement-support-for-github-issues`)
-- **commit message** — `#{number} {title}` (e.g. `#1 Implement support for GitHub Issues`)
+- **commit message** — `(#{number}) {title}` (e.g. `(#1) Implement support for GitHub Issues`)
 
 ### Linear output
 
@@ -47,7 +47,7 @@ For each assigned open issue it shows:
 
 - **branch** — story branch name (`feature/{identifier}-{slugified-title}`, e.g. `feature/ENG-123-add-auth-flow`)
 - **task branch** — for sub-issues: `feature/{parent}-{child}-{slugified-title}` (e.g. `feature/ENG-123-ENG-456-implement-login`)
-- **commit message** — `{identifier} {title}` (e.g. `ENG-456 Implement login`)
+- **commit message** — `({identifier}) {title}` (e.g. `(ENG-456) Implement login`)
 
 Branch names are slugified to be git-safe (special characters removed, unicode normalized to ASCII, title segment lowercased).
 

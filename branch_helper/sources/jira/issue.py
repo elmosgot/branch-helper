@@ -28,7 +28,7 @@ class JiraIssue(Issue):
     def commit_message(self) -> str | None:
         if self.entity.getType() not in ["Subtaak", "Taak"]:
             return None
-        return f"{self.entity.getId()} {self.entity.getField('summary')}"
+        return f"({self.entity.getId()}) {self.entity.getField('summary')}"
 
     def note(self) -> str | None:
         issue_type = self.entity.getType()

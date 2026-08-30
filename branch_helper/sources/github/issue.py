@@ -22,4 +22,4 @@ class GitHubIssue(Issue):
         return None
 
     def commit_message(self) -> str | None:
-        return f"#{self.getNumber()} {self.getTitle()}"
+        return f"(#{self.getNumber()}) {self.getTitle()}"
