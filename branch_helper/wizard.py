@@ -7,10 +7,17 @@ from branch_helper.config import (
     resolve_base_branch,
     resolve_profile,
 )
-from branch_helper.git_ops import ensure_branch
+from branch_helper.git_ops import (
+    branch_exists,
+    ensure_branch,
+    is_on_branch,
+    stash_pop,
+    stash_push,
+    working_tree_dirty,
+)
 from branch_helper.output import print_issue
 from branch_helper.sources import get_source
-from branch_helper.sources.base import Issue
+from branch_helper.sources.issue import Issue
 
 
 def prompt_choice(title: str, options: list[str]) -> int:
@@ -80,19 +87,69 @@ def print_missing_base_branch_error(alias_name: str) -> None:
     print("  base_branch: master", file=sys.stderr)
 
 
+def _branch_targets(selected: Issue, base_branch: str) -> tuple[str, str, str | None]:
+    story_branch = selected.branch()
+    task_branch = selected.task_branch()
+    if task_branch:
+        return task_branch, story_branch, story_branch
+    return story_branch, base_branch, None
+
+
+def _needs_branch_switch(target: str) -> bool:
+    return not is_on_branch(target)
+
+
+def _maybe_stash_before_switch(target: str) -> bool:
+    if not _needs_branch_switch(target):
+        print("Working tree has changes but already on target branch; not stashing.")
+        return False
+    if not working_tree_dirty():
+        print("Working tree clean.")
+        return False
+    if not prompt_yes_no(
+        "Working tree has uncommitted changes. Stash before switching?"
+    ):
+        print("Proceeding without stash.")
+        return False
+    return stash_push(f"branch-helper: checkout {target}")
+
+
+def _ensure_issue_branch(
+    selected: Issue,
+    base_branch: str,
+) -> None:
+    target, parent, story_branch = _branch_targets(selected, base_branch)
+
+    if story_branch is not None and not branch_exists(target):
+        print(f"Ensuring story branch '{story_branch}' exists…")
+        ensure_branch(story_branch, base_branch)
+        print(f"Ensuring task branch '{target}' from story branch…")
+        ensure_branch(target, story_branch)
+    else:
+        ensure_branch(target, parent)
+
+
 def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None:
-    branch_name = selected.task_branch() or selected.branch()
     base_branch = resolve_base_branch(profile)
     if not base_branch:
         print_missing_base_branch_error(alias_name)
         return
 
-    if not prompt_yes_no(
-        f"Create/checkout branch '{branch_name}' from '{base_branch}'?"
-    ):
+    target, parent, _story = _branch_targets(selected, base_branch)
+
+    if is_on_branch(target):
+        print(f"Already on the correct branch '{target}'.")
         return
 
-    ensure_branch(branch_name, base_branch)
+    if not prompt_yes_no(f"Create/checkout branch '{target}' from '{parent}'?"):
+        return
+
+    stashed = _maybe_stash_before_switch(target)
+    try:
+        _ensure_issue_branch(selected, base_branch)
+    finally:
+        if stashed:
+            stash_pop()
 
 
 def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:

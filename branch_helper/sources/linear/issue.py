@@ -1,5 +1,5 @@
 from branch_helper.slugify import slugify
-from branch_helper.sources.base import Issue
+from branch_helper.sources.issue import Issue
 
 
 class LinearIssue(Issue):

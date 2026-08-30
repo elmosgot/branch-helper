@@ -1,18 +1,12 @@
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+from branch_helper.local_settings import LocalSettings
+
 CONFIG_PATH = Path.home() / ".config" / "branch-helper" / "config.yml"
 LOCAL_DEFAULT_FILE = ".branch-helper-default"
-
-
-@dataclass(frozen=True)
-class LocalSettings:
-    path: Path
-    alias: str | None = None
-    base_branch: str | None = None
 
 
 def find_local_default_file() -> Path | None:
