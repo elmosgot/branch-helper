@@ -6,7 +6,7 @@ from branch_helper.git_status import list_worktree_entries, toggle_staged
 from branch_helper.sources.issue import Issue
 from branch_helper.worktree_entry import WorktreeEntry
 
-HEADER = "Stage files for commit  (↑/↓ move, Space toggle, Enter done)"
+HEADER = "Stage files for commit  (↑/↓ move, Space toggle, Enter commit, q cancel)"
 SEPARATOR = "─" * 60
 
 
@@ -74,7 +74,7 @@ def _draw_screen(
     stdscr.refresh()
 
 
-def _staging_main(stdscr: curses.window, issue: Issue) -> None:
+def _staging_main(stdscr: curses.window, issue: Issue) -> bool:
     curses.curs_set(0)
     stdscr.keypad(True)
 
@@ -88,8 +88,10 @@ def _staging_main(stdscr: curses.window, issue: Issue) -> None:
         _draw_screen(stdscr, entries, selected_index, issue)
 
         key = stdscr.getch()
-        if key in (ord("\n"), ord("\r"), ord("q")):
-            return
+        if key in (ord("\n"), ord("\r")):
+            return True
+        if key == ord("q"):
+            return False
 
         if not entries:
             continue
@@ -106,19 +108,20 @@ def _staging_main(stdscr: curses.window, issue: Issue) -> None:
             selected_key = _entry_key(entry)
 
 
-def run_staging_screen(issue: Issue) -> None:
+def run_staging_screen(issue: Issue) -> bool:
     if not is_git_repo():
         print("Not inside a git repository; skipping staging.", file=sys.stderr)
-        return
+        return False
 
     if not sys.stdin.isatty() or not sys.stdout.isatty():
         print(
             "Staging screen requires an interactive terminal; skipping.",
             file=sys.stderr,
         )
-        return
+        return False
 
     try:
-        curses.wrapper(lambda stdscr: _staging_main(stdscr, issue))
+        return curses.wrapper(lambda stdscr: _staging_main(stdscr, issue))
     except curses.error as error:
         print(f"Could not start staging screen: {error}", file=sys.stderr)
+        return False

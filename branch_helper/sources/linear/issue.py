@@ -35,4 +35,4 @@ class LinearIssue(Issue):
         )
 
     def commit_message(self) -> str | None:
-        return f"({self.getIdentifier()}) {self.getTitle()}"
+        return f"{self.getIdentifier()} {self.getTitle()}"

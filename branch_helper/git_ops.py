@@ -42,6 +42,20 @@ def working_tree_dirty() -> bool:
     return bool(result.stdout.strip())
 
 
+def has_staged_changes() -> bool:
+    result = _run_git(["diff", "--cached", "--quiet"], check=False)
+    return result.returncode == 1
+
+
+def create_commit(message: str) -> bool:
+    result = _run_git(["commit", "-m", message], check=False)
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        print(f"Failed to create commit: {detail}", file=sys.stderr)
+        return False
+    return True
+
+
 def stash_push(message: str) -> bool:
     _step(f"Stashing local changes ({message})…")
     result = _run_git(["stash", "push", "-u", "-m", message], check=False)
