@@ -20,6 +20,7 @@ On an interactive terminal, `branch-helper` with no flags starts a wizard: selec
 - **Jira / Linear tasks** — created from the story branch; the story branch is ensured first (from `base_branch` if missing)
 - **New branches** — created with `--no-track`, then pushed with `git push -u origin <branch>` so upstream is `origin/<branch>`, not master
 - **Dirty working tree** — prompts to stash before switching; restores stash after checkout
+- **Staging screen** — after branch setup, an interactive list of changed files (↑/↓ navigate, Space stage/unstage, Enter done). Does not commit yet.
 
 If you have only one project or one issue, selection steps are skipped automatically.
 
