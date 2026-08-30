@@ -43,10 +43,7 @@ class JiraIssue(Issue):
         if self.parent is None:
             return "no-parent"
         title = self.entity.getField("summary")
-        return (
-            f"feature/{self.parent.getId()}-"
-            f"{self.entity.getId()}-{slugify(title)}"
-        )
+        return f"feature/{self.parent.getId()}-{self.entity.getId()}-{slugify(title)}"
 
     def commit_message(self) -> str | None:
         if self.entity.getType() not in ["Subtaak", "Taak"]:
