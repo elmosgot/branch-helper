@@ -14,7 +14,7 @@ branch-helper --alias my-linear        # list all assigned issues for Linear
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
-On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. If you have only one project or one issue, that step is skipped automatically.
+On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. You can then create and check out the suggested git branch from the alias’s configured `base_branch`. If you have only one project or one issue, that step is skipped automatically.
 
 Use `--alias` when you want a non-interactive list of all assigned issues for a specific project.
 
@@ -22,8 +22,8 @@ Use `--alias` when you want a non-interactive list of all assigned issues for a 
 
 For each issue it shows:
 
-- **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `PROJ-123-add-pest-testing`)
-- **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues
+- **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `feature/PROJ-123-add-pest-testing`)
+- **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues (e.g. `feature/PROJ-123-PROJ-456-add-tests`)
 - **commit message** — formatted as `(KEY) summary`
 
 ### GitHub output
@@ -37,8 +37,8 @@ For each assigned open issue it shows:
 
 For each assigned open issue it shows:
 
-- **branch** — story branch name (`{identifier}-{slugified-title}`, e.g. `ENG-123-add-auth-flow`)
-- **task branch** — for sub-issues: `{parent}-{child}-{slugified-title}` (e.g. `ENG-123-ENG-456-implement-login`)
+- **branch** — story branch name (`feature/{identifier}-{slugified-title}`, e.g. `feature/ENG-123-add-auth-flow`)
+- **task branch** — for sub-issues: `feature/{parent}-{child}-{slugified-title}` (e.g. `feature/ENG-123-ENG-456-implement-login`)
 - **commit message** — `({identifier}) {title}` (e.g. `(ENG-456) Implement login`)
 
 Branch names are slugified to be git-safe (special characters removed, unicode normalized to ASCII, title segment lowercased).
@@ -94,6 +94,7 @@ default: project-x
 aliases:
   project-x:
     source: jira
+    base_branch: main
     jira:
       domain: "your-org.atlassian.net"
       username: "you@example.com"
@@ -101,34 +102,40 @@ aliases:
 
   elmosgot:
     source: github
+    base_branch: master
     github:
       token: "ghp_your-github-personal-access-token"
 
   my-linear:
     source: linear
+    base_branch: master
     linear:
       token: "lin_api_your-personal-api-key"
 ```
 
 - `default` — alias used when `--alias` is omitted and no `.branch-helper-default` is found
 - `aliases.<name>.source` — `jira`, `github`, or `linear`
+- `aliases.<name>.base_branch` — default branch to create feature branches from (e.g. `main`, `master`); required for wizard branch creation
 - `aliases.<name>.jira` — Jira domain, username, token
 - `aliases.<name>.github` — GitHub token
 - `aliases.<name>.linear` — Linear personal API key
 
 ## Per-project default
 
-Place a `.branch-helper-default` file in a repo root to override the global default for that project. The file contains a single alias name:
+Place a `.branch-helper-default` file in a repo root to override project settings for that repo. The first non-comment line is the alias name; you can optionally add a `base_branch` line for wizard branch creation:
 
 ```
 elmosgot
+base_branch: master
 ```
 
-branch-helper walks up from the current directory until it finds this file (same idea as git finding `.git`). Commit it in your repo so the whole team gets the correct default.
+branch-helper walks up from the current directory until it finds this file (same idea as git finding `.git`). Commit it in your repo so the whole team gets the correct defaults.
 
-**Priority:** `--alias` > `.branch-helper-default` > `config.yml` `default`
+**Alias priority:** `--alias` > `.branch-helper-default` alias line > `config.yml` `default`
 
-When a local default is set, the interactive wizard skips project selection and goes straight to issue selection.
+**Base branch priority:** `.branch-helper-default` `base_branch` > `aliases.<name>.base_branch` in `config.yml`
+
+When a local alias is set, the interactive wizard skips project selection and goes straight to issue selection. A `base_branch`-only file does not skip project selection.
 
 ## Setup
 
@@ -211,7 +218,7 @@ Branch format: `{TEAM}-{number}-{slug}` or `{prefix}/{TEAM}-{number}-{slug}` (e.
 - **Title:** `(BRA-1) {issue title}`
 - **Body:** issue description plus link to Linear
 
-For sub-issue branches with multiple identifiers (e.g. `ENG-123-ENG-456-implement-login`), the **last** identifier is used (`ENG-456`).
+For sub-issue branches with multiple identifiers (e.g. `feature/ENG-123-ENG-456-implement-login`), the **last** identifier is used (`ENG-456`).
 
 Requires repository secret **`LINEAR_API_KEY`** (Linear personal API key).
 

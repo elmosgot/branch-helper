@@ -35,7 +35,7 @@ class JiraIssue(Issue):
     def branch(self) -> str:
         base = self.parent if self.parent is not None else self.entity
         title = base.getField("summary")
-        return f"{base.getId()}-{slugify(title)}"
+        return f"feature/{base.getId()}-{slugify(title)}"
 
     def task_branch(self) -> str | None:
         if self.entity.getType() not in ["Subtaak", "Taak"]:
@@ -43,7 +43,7 @@ class JiraIssue(Issue):
         if self.parent is None:
             return "no-parent"
         title = self.entity.getField("summary")
-        return f"{self.parent.getId()}-{self.entity.getId()}-{slugify(title)}"
+        return f"feature/{self.parent.getId()}-{self.entity.getId()}-{slugify(title)}"
 
     def commit_message(self) -> str | None:
         if self.entity.getType() not in ["Subtaak", "Taak"]:

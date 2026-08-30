@@ -1,10 +1,16 @@
+import sys
+
 from branch_helper.config import (
+    CONFIG_PATH,
     get_effective_default,
     read_local_default,
+    resolve_base_branch,
     resolve_profile,
 )
+from branch_helper.git_ops import ensure_branch
 from branch_helper.output import print_issue
 from branch_helper.sources import get_source
+from branch_helper.sources.base import Issue
 
 
 def prompt_choice(title: str, options: list[str]) -> int:
@@ -17,6 +23,19 @@ def prompt_choice(title: str, options: list[str]) -> int:
             choice = int(raw)
             if 1 <= choice <= len(options):
                 return choice - 1
+        print("Invalid choice, try again.")
+
+
+def prompt_yes_no(message: str, *, default: bool = True) -> bool:
+    suffix = "Y/n" if default else "y/N"
+    while True:
+        raw = input(f"{message} [{suffix}]: ").strip().lower()
+        if not raw:
+            return default
+        if raw in ("y", "yes"):
+            return True
+        if raw in ("n", "no"):
+            return False
         print("Invalid choice, try again.")
 
 
@@ -48,6 +67,39 @@ def select_wizard_profile(config: dict) -> tuple[str, dict]:
     return alias_entries[alias_index]
 
 
+def print_missing_base_branch_error(alias_name: str) -> None:
+    print("Cannot create branch: no base_branch configured.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print(f"Set it in {CONFIG_PATH}:", file=sys.stderr)
+    print("  aliases:", file=sys.stderr)
+    print(f"    {alias_name}:", file=sys.stderr)
+    print("      base_branch: master", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Or in .branch-helper-default (repo root):", file=sys.stderr)
+    print(f"  {alias_name}", file=sys.stderr)
+    print("  base_branch: master", file=sys.stderr)
+
+
+def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None:
+    branch_name = selected.task_branch() or selected.branch()
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        return
+
+    if not prompt_yes_no(
+        f"Create/checkout branch '{branch_name}' from '{base_branch}'?"
+    ):
+        return
+
+    ensure_branch(branch_name, base_branch)
+
+
+def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
+    print_issue(selected)
+    maybe_create_branch(selected, profile, alias_name)
+
+
 def run_wizard(config: dict) -> None:
     alias_name, profile = select_wizard_profile(config)
     source = get_source(profile, alias_name)
@@ -58,9 +110,9 @@ def run_wizard(config: dict) -> None:
         return
 
     if len(items) == 1:
-        print_issue(items[0])
+        finish_issue(items[0], profile, alias_name)
         return
 
     issue_labels = [item.label() for item in items]
     issue_index = prompt_choice("Select issue:", issue_labels)
-    print_issue(items[issue_index])
+    finish_issue(items[issue_index], profile, alias_name)
