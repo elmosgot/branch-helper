@@ -137,6 +137,10 @@ def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None
 
     target, parent, _story = _branch_targets(selected, base_branch)
 
+    if is_on_branch(target):
+        print(f"Already on the correct branch '{target}'.")
+        return
+
     if not prompt_yes_no(f"Create/checkout branch '{target}' from '{parent}'?"):
         return
 
