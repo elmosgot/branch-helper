@@ -9,7 +9,9 @@ from branch_helper.config import (
 )
 from branch_helper.git_ops import (
     branch_exists,
+    create_commit,
     ensure_branch,
+    has_staged_changes,
     is_on_branch,
     stash_pop,
     stash_push,
@@ -153,10 +155,29 @@ def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None
             stash_pop()
 
 
+def maybe_commit_after_staging(selected: Issue) -> None:
+    subject = selected.commit_message()
+    if subject is None:
+        print("No commit message for this issue type; skipping commit.")
+        return
+
+    if not has_staged_changes():
+        print("No staged files; skipping commit.")
+        return
+
+    print(f"Commit subject: {subject}")
+    extra = input("Extra message (optional): ").strip()
+    message = subject if not extra else f"{subject}\n\n{extra}"
+
+    if create_commit(message):
+        print("Commit created.")
+
+
 def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
     print_issue(selected)
     maybe_create_branch(selected, profile, alias_name)
-    run_staging_screen(selected)
+    if run_staging_screen(selected):
+        maybe_commit_after_staging(selected)
 
 
 def run_wizard(config: dict) -> None:

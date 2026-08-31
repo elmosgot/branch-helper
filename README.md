@@ -20,7 +20,7 @@ On an interactive terminal, `branch-helper` with no flags starts a wizard: selec
 - **Jira / Linear tasks** — created from the story branch; the story branch is ensured first (from `base_branch` if missing)
 - **New branches** — created with `--no-track`, then pushed with `git push -u origin <branch>` so upstream is `origin/<branch>`, not master
 - **Dirty working tree** — prompts to stash before switching; restores stash after checkout
-- **Staging screen** — after branch setup, an interactive list of changed files (↑/↓ navigate, Space stage/unstage, Enter done). Does not commit yet.
+- **Staging screen** — after branch setup, an interactive list of changed files (↑/↓ navigate, Space stage/unstage, Enter commit, q cancel). Enter prompts for an optional extra message, then creates a commit with the issue subject plus any body you add.
 
 If you have only one project or one issue, selection steps are skipped automatically.
 
@@ -32,7 +32,7 @@ For each issue it shows:
 
 - **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `feature/PROJ-123-add-pest-testing`)
 - **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues (e.g. `feature/PROJ-123-PROJ-456-add-tests`)
-- **commit message** — formatted as `(KEY) summary`
+- **commit message** — formatted as `(KEY) summary` (e.g. `(PROJ-456) Add tests`)
 
 ### GitHub output
 
