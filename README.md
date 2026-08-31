@@ -7,20 +7,38 @@ Each project context is a named **alias** in config — source type and credenti
 ## Usage
 
 ```bash
-branch-helper                          # interactive wizard (TTY): pick project, pick issue
+branch-helper                          # interactive wizard: pick project, pick issue, create/verify branch
+branch-helper --commit                 # interactive wizard: stage and commit on the issue branch
+branch-helper --update                 # interactive wizard: fetch and upmerge parent branch
 branch-helper --alias project-x         # list all assigned issues for Jira project
-branch-helper --alias elmosgot         # list all assigned issues for GitHub
-branch-helper --alias my-linear        # list all assigned issues for Linear
+branch-helper --alias elmosgot --commit # commit mode for a specific project alias
 branch-helper --list-aliases           # list aliases, mark default, show source
 ```
 
-On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then see branch and commit suggestions for that item only. You can then create and check out the suggested git branch:
+On an interactive terminal, `branch-helper` with no flags starts a wizard: select a project (alias), then select an issue, then create or verify the suggested git branch. Use separate commands for committing and updating:
+
+| Command | What it does |
+|---|---|
+| `branch-helper` | Create or checkout the issue branch (verify if already on it). Does not stage or commit. |
+| `branch-helper --commit` | Stage and commit on the issue branch. You must already be on that branch (run plain `branch-helper` first). |
+| `branch-helper --update` | Fetch from origin, merge `origin/<current-branch>`, then upmerge the parent branch. Matches the current branch to an in-progress issue when possible; otherwise upmerges `base_branch`. |
+
+`--commit` and `--update` cannot be combined. Both require an interactive terminal.
+
+Branch creation rules (default mode):
 
 - **Story / GitHub issues** — created from the alias’s `base_branch` (or `.branch-helper-default`)
 - **Jira / Linear tasks** — created from the story branch; the story branch is ensured first (from `base_branch` if missing)
 - **New branches** — created with `--no-track`, then pushed with `git push -u origin <branch>` so upstream is `origin/<branch>`, not master
 - **Dirty working tree** — prompts to stash before switching; restores stash after checkout
-- **Staging screen** — after branch setup, an interactive list of changed files (↑/↓ navigate, Space stage/unstage, Enter commit, q cancel). Enter prompts for an optional extra message, then creates a commit with the issue subject plus any body you add.
+
+**Commit mode** (`--commit`): after selecting an issue, opens the staging screen (↑/↓ navigate, Space stage/unstage, Enter commit, q cancel). Enter prompts for an optional extra message, then creates a commit with the issue subject plus any body you add.
+
+**Update mode** (`--update`): when the working tree is dirty, prompts to stash before updating (restored after). Matches the current git branch to an assigned in-progress issue when possible and uses that issue’s parent for the upmerge; otherwise updates the current branch from `base_branch` (even when no issues are listed). No issue picker. Fetches origin, merges `origin/<current-branch>` when it exists, then upmerges the parent:
+
+- **Matched story / GitHub issue** — parent is `base_branch`
+- **Matched Jira / Linear task** — parent is the story branch
+- **No match / empty issue list** — parent is `base_branch`
 
 If you have only one project or one issue, selection steps are skipped automatically.
 
@@ -30,7 +48,7 @@ Use `--alias` when you want a non-interactive list of all assigned issues for a 
 
 For each issue it shows:
 
-- **branch** — story branch name (parent issue key + lowercase slugified summary, e.g. `feature/PROJ-123-add-pest-testing`)
+- **branch** — feature branch for this issue (own issue key + lowercase slugified summary, e.g. `feature/PROJ-123-add-auth-flow`); for Subtaak/Taak tasks, shows the parent story branch instead
 - **task branch** — task branch name (parent + task key + lowercase slugified summary), for Subtaak/Taak issues (e.g. `feature/PROJ-123-PROJ-456-add-tests`)
 - **commit message** — formatted as `(KEY) summary` (e.g. `(PROJ-456) Add tests`)
 
@@ -45,7 +63,7 @@ For each assigned open issue it shows:
 
 For each assigned open issue it shows:
 
-- **branch** — story branch name (`feature/{identifier}-{slugified-title}`, e.g. `feature/ENG-123-add-auth-flow`)
+- **branch** — feature branch for this issue (own identifier + slugified title, e.g. `feature/ENG-123-add-auth-flow`); for sub-issues, shows the parent story branch instead
 - **task branch** — for sub-issues: `feature/{parent}-{child}-{slugified-title}` (e.g. `feature/ENG-123-ENG-456-implement-login`)
 - **commit message** — `({identifier}) {title}` (e.g. `(ENG-456) Implement login`)
 
@@ -194,6 +212,8 @@ Run from the repo root without installing:
 
 ```bash
 python3 -m branch_helper
+python3 -m branch_helper --commit
+python3 -m branch_helper --update
 python3 -m branch_helper --list-aliases
 python3 -m branch_helper --alias elmosgot
 ```

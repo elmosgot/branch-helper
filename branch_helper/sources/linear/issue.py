@@ -23,7 +23,10 @@ class LinearIssue(Issue):
         return f"Issue: {self.getIdentifier()} {self.getTitle()}"
 
     def branch(self) -> str:
-        base = self.parent if self.hasParent() else self
+        if self.task_branch() is not None and self.hasParent():
+            base = self.parent
+        else:
+            base = self
         return f"feature/{base.getIdentifier()}-{slugify(base.getTitle())}"
 
     def task_branch(self) -> str | None:

@@ -10,11 +10,13 @@ from branch_helper.config import (
 from branch_helper.git_ops import (
     branch_exists,
     create_commit,
+    current_branch,
     ensure_branch,
     has_staged_changes,
     is_on_branch,
     stash_pop,
     stash_push,
+    update_branch,
     working_tree_dirty,
 )
 from branch_helper.output import print_issue
@@ -61,7 +63,10 @@ def build_alias_options(config: dict) -> tuple[list[str], list[tuple[str, dict]]
     return labels, entries
 
 
-def select_wizard_profile(config: dict) -> tuple[str, dict]:
+def select_wizard_profile(config: dict, alias: str | None = None) -> tuple[str, dict]:
+    if alias:
+        return resolve_profile(config, alias)
+
     local_default = read_local_default()
     aliases = config.get("aliases", {})
 
@@ -132,6 +137,35 @@ def _ensure_issue_branch(
         ensure_branch(target, parent)
 
 
+def _issue_branch_refs(
+    selected: Issue, profile: dict, alias_name: str
+) -> tuple[str, str]:
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        sys.exit(1)
+    target, parent, _story = _branch_targets(selected, base_branch)
+    return target, parent
+
+
+def _require_on_target_branch(
+    selected: Issue, profile: dict, alias_name: str
+) -> tuple[str, str]:
+    target, parent = _issue_branch_refs(selected, profile, alias_name)
+    if not is_on_branch(target):
+        current = current_branch() or "(unknown)"
+        print(
+            f"Not on the issue branch '{target}' (currently on '{current}').",
+            file=sys.stderr,
+        )
+        print(
+            "Run 'branch-helper' first to create or checkout the branch.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return target, parent
+
+
 def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None:
     base_branch = resolve_base_branch(profile)
     if not base_branch:
@@ -173,26 +207,96 @@ def maybe_commit_after_staging(selected: Issue) -> None:
         print("Commit created.")
 
 
-def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
+def _maybe_stash_before_update(branch: str) -> bool:
+    if not working_tree_dirty():
+        return False
+    if not prompt_yes_no(
+        "Working tree has uncommitted changes. Stash before updating?"
+    ):
+        print("Proceeding without stash.")
+        return False
+    return stash_push(f"branch-helper: update {branch}")
+
+
+def _run_update_current(parent: str) -> None:
+    current = current_branch()
+    if current is None:
+        print("Could not determine current branch.", file=sys.stderr)
+        sys.exit(1)
+    stashed = _maybe_stash_before_update(current)
+    try:
+        update_branch(current, parent)
+    finally:
+        if stashed:
+            stash_pop()
+
+
+def _find_issue_for_current_branch(
+    items: list[Issue], base_branch: str
+) -> Issue | None:
+    current = current_branch()
+    if current is None:
+        return None
+    for issue in items:
+        target, _parent, _story = _branch_targets(issue, base_branch)
+        if target.casefold() == current.casefold():
+            return issue
+    return None
+
+
+def _run_update_mode(items: list[Issue], profile: dict, alias_name: str) -> None:
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        sys.exit(1)
+
+    current = current_branch()
+    if current is None:
+        print("Could not determine current branch.", file=sys.stderr)
+        sys.exit(1)
+
+    matched = _find_issue_for_current_branch(items, base_branch)
+    if matched is not None:
+        _target, parent, _story = _branch_targets(matched, base_branch)
+        print_issue(matched)
+        _run_update_current(parent)
+        return
+
+    if not items:
+        print(f"No assigned issues found for '{alias_name}'.")
+    else:
+        print(f"No in-progress issue matches current branch '{current}'.")
+    print(f"Updating '{current}' from base branch '{base_branch}'.")
+    _run_update_current(base_branch)
+
+
+def finish_issue(selected: Issue, profile: dict, alias_name: str, mode: str) -> None:
     print_issue(selected)
-    maybe_create_branch(selected, profile, alias_name)
-    if run_staging_screen(selected):
-        maybe_commit_after_staging(selected)
+    if mode == "branch":
+        maybe_create_branch(selected, profile, alias_name)
+    elif mode == "commit":
+        _require_on_target_branch(selected, profile, alias_name)
+        if run_staging_screen(selected):
+            maybe_commit_after_staging(selected)
 
 
-def run_wizard(config: dict) -> None:
-    alias_name, profile = select_wizard_profile(config)
+def run_wizard(config: dict, *, mode: str = "branch", alias: str | None = None) -> None:
+    alias_name, profile = select_wizard_profile(config, alias)
     source = get_source(profile, alias_name)
     items = source.fetch_issues()
+
+    if mode == "update":
+        _run_update_mode(items, profile, alias_name)
+        return
 
     if not items:
         print(f"No assigned issues found for '{alias_name}'.")
         return
 
     if len(items) == 1:
-        finish_issue(items[0], profile, alias_name)
+        finish_issue(items[0], profile, alias_name, mode)
         return
 
     issue_labels = [item.label() for item in items]
     issue_index = prompt_choice("Select issue:", issue_labels)
-    finish_issue(items[issue_index], profile, alias_name)
+    finish_issue(items[issue_index], profile, alias_name, mode)

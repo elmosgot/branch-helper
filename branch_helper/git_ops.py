@@ -144,6 +144,51 @@ def _remote_branch_exists(name: str) -> bool:
     )
 
 
+def _merge_ref(ref: str) -> None:
+    result = _run_git(["merge", "--no-edit", ref], check=False)
+    if result.returncode != 0:
+        _git_fail(result, f"Failed to merge '{ref}'.")
+
+
+def update_branch(current_branch: str, parent_branch: str) -> None:
+    if not is_git_repo():
+        print("Not inside a git repository.", file=sys.stderr)
+        sys.exit(1)
+
+    _step("Fetching origin…")
+    fetch = _run_git(["fetch", "origin"], check=False)
+    if fetch.returncode != 0:
+        print(
+            f"Warning: git fetch origin failed: {fetch.stderr.strip()}",
+            file=sys.stderr,
+        )
+
+    if _remote_branch_exists(current_branch):
+        _step(f"Merging 'origin/{current_branch}'…")
+        _merge_ref(f"origin/{current_branch}")
+    else:
+        print(f"No remote branch 'origin/{current_branch}'; skipping remote update.")
+
+    if _remote_branch_exists(parent_branch):
+        parent_ref = f"origin/{parent_branch}"
+        _step(f"Upmerging '{parent_ref}'…")
+    elif _local_branch_exists(parent_branch):
+        local_parent = _find_branch_case_insensitive(
+            parent_branch, _local_branch_names()
+        )
+        parent_ref = local_parent or parent_branch
+        _step(f"Upmerging local '{parent_ref}'…")
+    else:
+        print(
+            f"Parent branch '{parent_branch}' not found locally or on origin.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    _merge_ref(parent_ref)
+    _step("Update complete.")
+
+
 def _git_fail(result: subprocess.CompletedProcess, message: str) -> None:
     detail = result.stderr.strip() or result.stdout.strip()
     if detail:
