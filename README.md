@@ -21,7 +21,7 @@ On an interactive terminal, `branch-helper` with no flags starts a wizard: selec
 |---|---|
 | `branch-helper` | Create or checkout the issue branch (verify if already on it). Does not stage or commit. |
 | `branch-helper --commit` | Stage and commit on the issue branch. You must already be on that branch (run plain `branch-helper` first). |
-| `branch-helper --update` | Fetch from origin, merge `origin/<current-branch>`, then upmerge the parent branch. You must already be on the issue branch. |
+| `branch-helper --update` | Fetch from origin, merge `origin/<current-branch>`, then upmerge the parent branch. Matches the current branch to an in-progress issue when possible; otherwise upmerges `base_branch`. |
 
 `--commit` and `--update` cannot be combined. Both require an interactive terminal.
 
@@ -34,10 +34,11 @@ Branch creation rules (default mode):
 
 **Commit mode** (`--commit`): after selecting an issue, opens the staging screen (↑/↓ navigate, Space stage/unstage, Enter commit, q cancel). Enter prompts for an optional extra message, then creates a commit with the issue subject plus any body you add.
 
-**Update mode** (`--update`): when the working tree is dirty, prompts to stash before updating (restored after). Fetches origin, merges `origin/<current-branch>` when it exists, then upmerges the parent:
+**Update mode** (`--update`): when the working tree is dirty, prompts to stash before updating (restored after). Matches the current git branch to an assigned in-progress issue when possible and uses that issue’s parent for the upmerge; otherwise updates the current branch from `base_branch` (even when no issues are listed). No issue picker. Fetches origin, merges `origin/<current-branch>` when it exists, then upmerges the parent:
 
-- **Story / GitHub issues** — parent is `base_branch`
-- **Jira / Linear tasks** — parent is the story branch
+- **Matched story / GitHub issue** — parent is `base_branch`
+- **Matched Jira / Linear task** — parent is the story branch
+- **No match / empty issue list** — parent is `base_branch`
 
 If you have only one project or one issue, selection steps are skipped automatically.
 

@@ -218,8 +218,7 @@ def _maybe_stash_before_update(branch: str) -> bool:
     return stash_push(f"branch-helper: update {branch}")
 
 
-def maybe_update_branch(selected: Issue, profile: dict, alias_name: str) -> None:
-    _target, parent = _require_on_target_branch(selected, profile, alias_name)
+def _run_update_current(parent: str) -> None:
     current = current_branch()
     if current is None:
         print("Could not determine current branch.", file=sys.stderr)
@@ -232,6 +231,45 @@ def maybe_update_branch(selected: Issue, profile: dict, alias_name: str) -> None
             stash_pop()
 
 
+def _find_issue_for_current_branch(
+    items: list[Issue], base_branch: str
+) -> Issue | None:
+    current = current_branch()
+    if current is None:
+        return None
+    for issue in items:
+        target, _parent, _story = _branch_targets(issue, base_branch)
+        if target.casefold() == current.casefold():
+            return issue
+    return None
+
+
+def _run_update_mode(items: list[Issue], profile: dict, alias_name: str) -> None:
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        sys.exit(1)
+
+    current = current_branch()
+    if current is None:
+        print("Could not determine current branch.", file=sys.stderr)
+        sys.exit(1)
+
+    matched = _find_issue_for_current_branch(items, base_branch)
+    if matched is not None:
+        _target, parent, _story = _branch_targets(matched, base_branch)
+        print_issue(matched)
+        _run_update_current(parent)
+        return
+
+    if not items:
+        print(f"No assigned issues found for '{alias_name}'.")
+    else:
+        print(f"No in-progress issue matches current branch '{current}'.")
+    print(f"Updating '{current}' from base branch '{base_branch}'.")
+    _run_update_current(base_branch)
+
+
 def finish_issue(selected: Issue, profile: dict, alias_name: str, mode: str) -> None:
     print_issue(selected)
     if mode == "branch":
@@ -240,14 +278,16 @@ def finish_issue(selected: Issue, profile: dict, alias_name: str, mode: str) -> 
         _require_on_target_branch(selected, profile, alias_name)
         if run_staging_screen(selected):
             maybe_commit_after_staging(selected)
-    elif mode == "update":
-        maybe_update_branch(selected, profile, alias_name)
 
 
 def run_wizard(config: dict, *, mode: str = "branch", alias: str | None = None) -> None:
     alias_name, profile = select_wizard_profile(config, alias)
     source = get_source(profile, alias_name)
     items = source.fetch_issues()
+
+    if mode == "update":
+        _run_update_mode(items, profile, alias_name)
+        return
 
     if not items:
         print(f"No assigned issues found for '{alias_name}'.")
