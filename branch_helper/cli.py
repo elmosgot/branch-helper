@@ -21,7 +21,26 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="List configured aliases",
     )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--commit",
+        action="store_true",
+        help="Stage and commit on the current issue branch (interactive wizard)",
+    )
+    mode_group.add_argument(
+        "--update",
+        action="store_true",
+        help=("Fetch from origin and upmerge the parent branch (interactive wizard)"),
+    )
     return parser.parse_args()
+
+
+def _resolve_mode(args: argparse.Namespace) -> str:
+    if args.commit:
+        return "commit"
+    if args.update:
+        return "update"
+    return "branch"
 
 
 def main() -> int:
@@ -32,14 +51,26 @@ def main() -> int:
         print_aliases(config)
         return 0
 
+    mode = _resolve_mode(args)
+
     try:
+        if mode in ("commit", "update"):
+            if not sys.stdin.isatty():
+                print(
+                    f"--{mode} requires an interactive terminal.",
+                    file=sys.stderr,
+                )
+                return 1
+            run_wizard(config, mode=mode, alias=args.alias)
+            return 0
+
         if args.alias:
             alias_name, profile = resolve_profile(config, args.alias)
             print_issues_for_profile(alias_name, profile)
             return 0
 
         if sys.stdin.isatty():
-            run_wizard(config)
+            run_wizard(config, mode=mode)
             return 0
 
         alias_name, profile = resolve_profile(config, None)

@@ -13,7 +13,10 @@ class JiraIssue(Issue):
         return f"{self.entity.getType()}: {self.entity.getName()}"
 
     def branch(self) -> str:
-        base = self.parent if self.parent is not None else self.entity
+        if self.task_branch() is not None and self.parent is not None:
+            base = self.parent
+        else:
+            base = self.entity
         title = base.getField("summary")
         return f"feature/{base.getId()}-{slugify(title)}"
 
