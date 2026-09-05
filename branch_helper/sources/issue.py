@@ -21,3 +21,7 @@ class Issue(ABC):
     def note(self) -> str | None:
         """Optional extra line (e.g. Jira non-task warning)."""
         return None
+
+    def story_issue(self) -> "Issue":
+        """Story branch owner: self for stories, parent for tasks."""
+        return self
