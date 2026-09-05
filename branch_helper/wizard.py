@@ -1,5 +1,6 @@
 import sys
 
+from branch_helper.branch_mode import BranchMode, resolve_branch_mode
 from branch_helper.config import (
     CONFIG_PATH,
     get_effective_default,
@@ -10,11 +11,15 @@ from branch_helper.config import (
 from branch_helper.git_ops import (
     branch_exists,
     create_commit,
+    current_branch,
     ensure_branch,
+    get_vscode_merge_base,
     has_staged_changes,
     is_on_branch,
+    parent_from_merge_base,
     stash_pop,
     stash_push,
+    update_branch,
     working_tree_dirty,
 )
 from branch_helper.output import print_issue
@@ -61,7 +66,10 @@ def build_alias_options(config: dict) -> tuple[list[str], list[tuple[str, dict]]
     return labels, entries
 
 
-def select_wizard_profile(config: dict) -> tuple[str, dict]:
+def select_wizard_profile(config: dict, alias: str | None = None) -> tuple[str, dict]:
+    if alias:
+        return resolve_profile(config, alias)
+
     local_default = read_local_default()
     aliases = config.get("aliases", {})
 
@@ -90,12 +98,23 @@ def print_missing_base_branch_error(alias_name: str) -> None:
     print("  base_branch: master", file=sys.stderr)
 
 
-def _branch_targets(selected: Issue, base_branch: str) -> tuple[str, str, str | None]:
+def _branch_targets(
+    selected: Issue,
+    base_branch: str,
+    branch_mode: BranchMode,
+) -> tuple[str, str, str | None]:
     story_branch = selected.branch()
     task_branch = selected.task_branch()
-    if task_branch:
+    if task_branch and branch_mode == "task":
         return task_branch, story_branch, story_branch
     return story_branch, base_branch, None
+
+
+def resolve_issue_branch_mode(selected: Issue) -> tuple[BranchMode | None, bool]:
+    task_branch = selected.task_branch()
+    if task_branch is None:
+        return None, False
+    return resolve_branch_mode(selected.branch(), task_branch)
 
 
 def _needs_branch_switch(target: str) -> bool:
@@ -120,8 +139,9 @@ def _maybe_stash_before_switch(target: str) -> bool:
 def _ensure_issue_branch(
     selected: Issue,
     base_branch: str,
+    branch_mode: BranchMode,
 ) -> None:
-    target, parent, story_branch = _branch_targets(selected, base_branch)
+    target, parent, story_branch = _branch_targets(selected, base_branch, branch_mode)
 
     if story_branch is not None and not branch_exists(target):
         print(f"Ensuring story branch '{story_branch}' exists…")
@@ -132,13 +152,53 @@ def _ensure_issue_branch(
         ensure_branch(target, parent)
 
 
-def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None:
+def _issue_branch_refs(
+    selected: Issue,
+    profile: dict,
+    alias_name: str,
+    branch_mode: BranchMode,
+) -> tuple[str, str]:
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        sys.exit(1)
+    target, parent, _story = _branch_targets(selected, base_branch, branch_mode)
+    return target, parent
+
+
+def _require_on_target_branch(
+    selected: Issue,
+    profile: dict,
+    alias_name: str,
+    branch_mode: BranchMode,
+) -> tuple[str, str]:
+    target, parent = _issue_branch_refs(selected, profile, alias_name, branch_mode)
+    if not is_on_branch(target):
+        current = current_branch() or "(unknown)"
+        print(
+            f"Not on the issue branch '{target}' (currently on '{current}').",
+            file=sys.stderr,
+        )
+        print(
+            "Run 'branch-helper' first to create or checkout the branch.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return target, parent
+
+
+def maybe_create_branch(
+    selected: Issue,
+    profile: dict,
+    alias_name: str,
+    branch_mode: BranchMode,
+) -> None:
     base_branch = resolve_base_branch(profile)
     if not base_branch:
         print_missing_base_branch_error(alias_name)
         return
 
-    target, parent, _story = _branch_targets(selected, base_branch)
+    target, parent, _story = _branch_targets(selected, base_branch, branch_mode)
 
     if is_on_branch(target):
         print(f"Already on the correct branch '{target}'.")
@@ -149,7 +209,7 @@ def maybe_create_branch(selected: Issue, profile: dict, alias_name: str) -> None
 
     stashed = _maybe_stash_before_switch(target)
     try:
-        _ensure_issue_branch(selected, base_branch)
+        _ensure_issue_branch(selected, base_branch, branch_mode)
     finally:
         if stashed:
             stash_pop()
@@ -173,26 +233,152 @@ def maybe_commit_after_staging(selected: Issue) -> None:
         print("Commit created.")
 
 
-def finish_issue(selected: Issue, profile: dict, alias_name: str) -> None:
-    print_issue(selected)
-    maybe_create_branch(selected, profile, alias_name)
-    if run_staging_screen(selected):
-        maybe_commit_after_staging(selected)
+def _maybe_stash_before_update(branch: str) -> bool:
+    if not working_tree_dirty():
+        return False
+    if not prompt_yes_no(
+        "Working tree has uncommitted changes. Stash before updating?"
+    ):
+        print("Proceeding without stash.")
+        return False
+    return stash_push(f"branch-helper: update {branch}")
 
 
-def run_wizard(config: dict) -> None:
-    alias_name, profile = select_wizard_profile(config)
+def _run_update_current(parent: str) -> None:
+    current = current_branch()
+    if current is None:
+        print("Could not determine current branch.", file=sys.stderr)
+        sys.exit(1)
+    stashed = _maybe_stash_before_update(current)
+    try:
+        update_branch(current, parent)
+    finally:
+        if stashed:
+            stash_pop()
+
+
+def _issue_for_update_display(issue: Issue, branch_mode: BranchMode) -> Issue:
+    if branch_mode == "story" and issue.task_branch() is not None:
+        return issue.story_issue()
+    return issue
+
+
+def _update_match_priority(branch_mode: BranchMode, issue: Issue) -> int:
+    if branch_mode == "task" and issue.task_branch() is not None:
+        return 0
+    if issue.task_branch() is None:
+        return 1
+    return 2
+
+
+def _find_issue_for_current_branch(
+    items: list[Issue], base_branch: str
+) -> tuple[Issue, str] | None:
+    current = current_branch()
+    if current is None:
+        return None
+
+    matches: list[tuple[Issue, str, int]] = []
+    for issue in items:
+        branch_modes: tuple[BranchMode, ...] = (
+            ("task", "story") if issue.task_branch() else ("task",)
+        )
+        for branch_mode in branch_modes:
+            target, parent, _story = _branch_targets(issue, base_branch, branch_mode)
+            if target.casefold() == current.casefold():
+                display = _issue_for_update_display(issue, branch_mode)
+                priority = _update_match_priority(branch_mode, issue)
+                matches.append((display, parent, priority))
+
+    if not matches:
+        return None
+
+    matches.sort(key=lambda match: match[2])
+    display, parent, _priority = matches[0]
+    return display, parent
+
+
+def _run_update_mode(items: list[Issue], profile: dict, alias_name: str) -> None:
+    base_branch = resolve_base_branch(profile)
+    if not base_branch:
+        print_missing_base_branch_error(alias_name)
+        sys.exit(1)
+
+    current = current_branch()
+    if current is None:
+        print("Could not determine current branch.", file=sys.stderr)
+        sys.exit(1)
+
+    matched = _find_issue_for_current_branch(items, base_branch)
+    if matched is not None:
+        issue, parent = matched
+        print_issue(issue)
+        _run_update_current(parent)
+        return
+
+    if not items:
+        print(f"No assigned issues found for '{alias_name}'.")
+    else:
+        print(f"No in-progress issue matches current branch '{current}'.")
+
+    merge_base = get_vscode_merge_base(current)
+    if merge_base is not None:
+        parent = parent_from_merge_base(merge_base)
+        print(f"Updating '{current}' from stored merge base '{merge_base}'.")
+        _run_update_current(parent)
+        return
+
+    print(f"Updating '{current}' from base branch '{base_branch}'.")
+    _run_update_current(base_branch)
+
+
+def finish_issue(
+    selected: Issue,
+    profile: dict,
+    alias_name: str,
+    wizard_mode: str,
+) -> None:
+    issue_branch_mode, mode_stored = resolve_issue_branch_mode(selected)
+    effective_branch_mode = (
+        issue_branch_mode if issue_branch_mode is not None else "task"
+    )
+    print_issue(
+        selected,
+        branch_mode=issue_branch_mode,
+        mode_stored=mode_stored,
+    )
+    if wizard_mode == "branch":
+        maybe_create_branch(selected, profile, alias_name, effective_branch_mode)
+    elif wizard_mode == "commit":
+        _require_on_target_branch(
+            selected, profile, alias_name, effective_branch_mode
+        )
+        if run_staging_screen(selected):
+            maybe_commit_after_staging(selected)
+
+
+def run_wizard(
+    config: dict,
+    *,
+    mode: str = "branch",
+    alias: str | None = None,
+) -> None:
+    alias_name, profile = select_wizard_profile(config, alias)
     source = get_source(profile, alias_name)
     items = source.fetch_issues()
+
+    if mode == "update":
+        _run_update_mode(items, profile, alias_name)
+        return
 
     if not items:
         print(f"No assigned issues found for '{alias_name}'.")
         return
 
     if len(items) == 1:
-        finish_issue(items[0], profile, alias_name)
+        finish_issue(items[0], profile, alias_name, mode)
         return
 
     issue_labels = [item.label() for item in items]
     issue_index = prompt_choice("Select issue:", issue_labels)
-    finish_issue(items[issue_index], profile, alias_name)
+    finish_issue(items[issue_index], profile, alias_name, mode)

@@ -144,6 +144,51 @@ def _remote_branch_exists(name: str) -> bool:
     )
 
 
+def _merge_ref(ref: str) -> None:
+    result = _run_git(["merge", "--no-edit", ref], check=False)
+    if result.returncode != 0:
+        _git_fail(result, f"Failed to merge '{ref}'.")
+
+
+def update_branch(current_branch: str, parent_branch: str) -> None:
+    if not is_git_repo():
+        print("Not inside a git repository.", file=sys.stderr)
+        sys.exit(1)
+
+    _step("Fetching origin…")
+    fetch = _run_git(["fetch", "origin"], check=False)
+    if fetch.returncode != 0:
+        print(
+            f"Warning: git fetch origin failed: {fetch.stderr.strip()}",
+            file=sys.stderr,
+        )
+
+    if _remote_branch_exists(current_branch):
+        _step(f"Merging 'origin/{current_branch}'…")
+        _merge_ref(f"origin/{current_branch}")
+    else:
+        print(f"No remote branch 'origin/{current_branch}'; skipping remote update.")
+
+    if _remote_branch_exists(parent_branch):
+        parent_ref = f"origin/{parent_branch}"
+        _step(f"Upmerging '{parent_ref}'…")
+    elif _local_branch_exists(parent_branch):
+        local_parent = _find_branch_case_insensitive(
+            parent_branch, _local_branch_names()
+        )
+        parent_ref = local_parent or parent_branch
+        _step(f"Upmerging local '{parent_ref}'…")
+    else:
+        print(
+            f"Parent branch '{parent_branch}' not found locally or on origin.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    _merge_ref(parent_ref)
+    _step("Update complete.")
+
+
 def _git_fail(result: subprocess.CompletedProcess, message: str) -> None:
     detail = result.stderr.strip() or result.stdout.strip()
     if detail:
@@ -177,6 +222,42 @@ def _checkout_remote_tracking(name: str, remote_name: str) -> None:
     checkout = _run_git(["checkout", "-b", name, f"origin/{remote_name}"], check=False)
     if checkout.returncode != 0:
         _git_fail(checkout, f"Failed to checkout 'origin/{remote_name}'.")
+
+
+def _merge_base_ref(parent_branch: str) -> str:
+    if _remote_branch_exists(parent_branch):
+        return f"origin/{parent_branch}"
+    return parent_branch
+
+
+def _branch_config_key(branch_name: str, key: str) -> str:
+    return f"branch.{branch_name}.{key}"
+
+
+def set_vscode_merge_base(branch_name: str, parent_branch: str) -> None:
+    merge_base = _merge_base_ref(parent_branch)
+    _run_git(
+        ["config", _branch_config_key(branch_name, "vscode-merge-base"), merge_base],
+        check=False,
+    )
+
+
+def get_vscode_merge_base(branch_name: str) -> str | None:
+    result = _run_git(
+        ["config", "--get", _branch_config_key(branch_name, "vscode-merge-base")],
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    value = result.stdout.strip()
+    return value or None
+
+
+def parent_from_merge_base(merge_base: str) -> str:
+    prefix = "origin/"
+    if merge_base.startswith(prefix):
+        return merge_base[len(prefix) :]
+    return merge_base
 
 
 def ensure_branch(name: str, parent_branch: str) -> EnsureBranchResult:
@@ -253,6 +334,7 @@ def ensure_branch(name: str, parent_branch: str) -> EnsureBranchResult:
     if create.returncode != 0:
         _git_fail(create, f"Failed to create branch '{name}'.")
 
+    set_vscode_merge_base(name, parent_branch)
     _step(f"Created and checked out branch '{name}'.")
     _push_upstream(name)
     return EnsureBranchResult(created=True, checked_out=True)
